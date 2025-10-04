@@ -37,6 +37,8 @@ export interface SolverStats {
   wins: number
   tradesParticipated: number
   volumeUSDC: number
+  profitUSDCWithFees?: number
+  profitUSDCNoFees?: number
 }
 
 export interface DailySeriesPoint {
@@ -67,6 +69,22 @@ export interface AggregatesResult {
     avgWinMarginPct: number | null
     p50WinMarginPct: number | null
   }>
+  profitStatsWithFees?: {
+    count: number
+    totalUSDC: number
+    avgUSDC: number
+    p25USDC: number
+    p50USDC: number
+    p75USDC: number
+  }
+  profitStatsNoFees?: {
+    count: number
+    totalUSDC: number
+    avgUSDC: number
+    p25USDC: number
+    p50USDC: number
+    p75USDC: number
+  }
   tradesPreview: Array<{
     orderUid: string
     timestamp: number
