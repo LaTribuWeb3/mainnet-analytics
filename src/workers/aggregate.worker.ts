@@ -79,7 +79,7 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
       participation.push(participants)
       if (participants === 1) singleBid += 1
 
-      const priceUSDCPerBTC = computePriceUSDCPerBase(tr.sellToken, tr.buyToken, tr.sellAmount, tr.buyAmount) // used later for preview and profit calcs
+      // computePriceUSDCPerBase available via per-solution pricing below
       // Notional USDC using USDC side of the trade
       const sellLc = tr.sellToken.toLowerCase()
       const buyLc = tr.buyToken.toLowerCase()
