@@ -1,3 +1,46 @@
+:root {
+  --bg: #0b0f1a;
+  --panel: #111826;
+  --text: #e5e7eb;
+  --muted: #9ca3af;
+  --accent: #60a5fa;
+}
+
+.app {
+  color: var(--text);
+  background: var(--bg);
+  min-height: 100vh;
+}
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 16px;
+}
+.panel {
+  background: var(--panel);
+  border-radius: 12px;
+  padding: 16px;
+}
+.controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.controls input, .controls select { background: #0f172a; color: var(--text); border: 1px solid #1f2937; border-radius: 8px; padding: 8px; }
+.kpi {
+  grid-column: span 3;
+}
+.kpi h3 { margin: 0 0 8px; font-size: 14px; color: var(--muted); }
+.kpi .val { font-size: 24px; font-weight: 700; }
+.table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.table th, .table td { padding: 8px 12px; border-bottom: 1px solid #1f2937; text-align: left; }
+.muted { color: var(--muted); }
+.progress {
+  width: 100%; height: 8px; background: #1f2937; border-radius: 8px; overflow: hidden;
+}
+.progress > div { height: 100%; background: var(--accent); width: 0%; transition: width .2s ease; }
+
 #root {
   max-width: 1280px;
   margin: 0 auto;
