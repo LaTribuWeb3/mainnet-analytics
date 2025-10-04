@@ -40,11 +40,14 @@ function App() {
     }
     // Use relative path first; provide optional external URL as fallback via ?dataUrl= query
     const params = new URLSearchParams(location.search)
-    const altFileUrl = params.get('dataUrl') || undefined
-    // Try WBTC dataset by default; allow alternate via ?pair= param
-    const pair = (params.get('pair') || 'wbtc').toLowerCase()
+    // Try API first by default; allow alternate via ?pair= param
+    const pair = (params.get('pair') || 'wbtc').toLowerCase() as 'wbtc' | 'weth'
     const localPath = pair === 'weth' ? '/data/usdc-weth-trades.enriched-prices7.json' : '/data/usdc-wbtc-trades.enriched-prices9.json'
-    w.postMessage({ type: 'aggregate', filePath: localPath, altFileUrl })
+    const apiFile = pair === 'weth' ? 'usdc-weth-trades.enriched-prices.json' : 'usdc-wbtc-trades.enriched-prices.json'
+    const apiUrlDefault = `https://prod.mainnet.cowswap.la-tribu.xyz/api/data/${apiFile}`
+    const primaryUrl = params.get('dataUrl') || apiUrlDefault
+    // Primary: API (or dataUrl override), Fallback: local file
+    w.postMessage({ type: 'aggregate', filePath: primaryUrl, altFileUrl: localPath })
     return () => { w.terminate() }
   }, [])
 
@@ -77,7 +80,7 @@ function App() {
             <div className="muted">Parsing data… This may take a moment.</div>
             <div className="progress" style={{ marginTop: 8 }}><div style={{ width: progress ? '20%' : '5%' }} /></div>
             <div className="muted" style={{ marginTop: 8 }}>
-              Serving dataset from <code>?pair=wbtc|weth</code> (default wbtc). Local files: <code>data/usdc-wbtc-trades.enriched-prices9.json</code> or <code>data/usdc-weth-trades.enriched-prices7.json</code>. Remote fallback: <code>?dataUrl=https://example.com/file.json</code>.
+              Serving dataset from public API by default (<code>https://prod.mainnet.cowswap.la-tribu.xyz/api/data/...</code>) based on <code>?pair=wbtc|weth</code> (default wbtc). If API fails, it falls back to local files <code>data/usdc-wbtc-trades.enriched-prices9.json</code> or <code>data/usdc-weth-trades.enriched-prices7.json</code>. You can override the API with <code>?dataUrl=https://example.com/file.json</code>.
             </div>
           </div>
         )}

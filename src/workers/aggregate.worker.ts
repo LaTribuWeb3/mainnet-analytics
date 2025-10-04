@@ -39,13 +39,19 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
     }
     // aggregate
     const { filePath, altFileUrl } = ev.data
-    let res = await fetch(filePath).catch(() => null as any)
-    if (!res || !res.ok || !res.body) {
+    // Try local path first; if content-type looks like HTML, fall back to altFileUrl (API)
+    let res = await fetch(filePath, { cache: 'no-store' }).catch(() => null as any)
+    const isHtml = (r: Response | null) => {
+      if (!r) return false
+      const ct = r.headers.get('content-type') || ''
+      return ct.includes('text/html')
+    }
+    if (!res || !res.ok || !res.body || isHtml(res)) {
       if (altFileUrl) {
-        res = await fetch(altFileUrl).catch(() => null as any)
+        res = await fetch(altFileUrl, { cache: 'no-store', headers: { 'accept': 'application/json,text/plain;q=0.9,*/*;q=0.8' } }).catch(() => null as any)
       }
     }
-    if (!res || !res.ok || !res.body) throw new Error(`Failed to fetch dataset from both sources`)
+    if (!res || !res.ok || !res.body || isHtml(res)) throw new Error(`Failed to fetch dataset from both sources`)
 
     // Aggregate metrics
     const solverToStats = new Map<string, SolverStats>()
