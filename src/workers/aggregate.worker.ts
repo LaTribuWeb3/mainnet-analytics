@@ -186,7 +186,11 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
     
     // Simpler and more robust: read full text and parse once
     const text = await res.text()
-    const arr = JSON.parse(text) as TradeRecord[]
+    const cleaned = text.replace(/^\uFEFF/, '').trim()
+    if (!(cleaned.startsWith('[') || cleaned.startsWith('{'))) {
+      throw new Error(`Dataset is not JSON. First chars: ${cleaned.slice(0, 64)}`)
+    }
+    const arr = JSON.parse(cleaned) as TradeRecord[]
     for (const tr of arr) processRecord(tr)
 
     const marginPct = margins.map(x => x * 100)
