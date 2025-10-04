@@ -171,9 +171,9 @@ function App() {
                 <h3>Winner Margin Distribution (%)</h3>
                 {data.marginStats && (
                   <div className="muted" style={{ marginBottom: 8 }}>
-                    <span title="Number of trades with computable winner vs block-high margin">n={data.marginStats.count}</span>
+                    <span title="Number of trades with computable winner vs block margin">n={data.marginStats.count}</span>
                     <span style={{ margin: '0 6px' }}>•</span>
-                    <span title="Average percent difference: (winner USDC/BTC − block-high USDC/BTC) / block-high">avg={data.marginStats.avgPct.toFixed(2)}%</span>
+                    <span title="Average percent difference: (winner USDC/BTC − block USDC/BTC) / block">avg={data.marginStats.avgPct.toFixed(2)}%</span>
                     <span style={{ margin: '0 6px' }}>•</span>
                     <span title="Median percent difference (50th percentile)">p50={data.marginStats.p50Pct.toFixed(2)}%</span>
                     <span style={{ margin: '0 6px' }}>•</span>
