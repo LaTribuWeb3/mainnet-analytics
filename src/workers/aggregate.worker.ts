@@ -3,7 +3,7 @@ import { computePriceUSDCPerBTC, blockMidUSDCPerBTC, blockHighUSDCPerBTC, normal
 import type { AggregatesResult, TradeRecord, SolverStats } from '../types'
 
 type FilterCriteria = { fromTs?: number; toTs?: number; direction?: 'USDC_to_WBTC' | 'WBTC_to_USDC' | 'ALL'; minNotional?: number; maxNotional?: number }
-type MsgIn = { type: 'aggregate'; filePath: string } | { type: 'filter'; criteria: FilterCriteria } | { type: 'hydrate'; index: TradeIdx[] }
+type MsgIn = { type: 'aggregate'; filePath: string; altFileUrl?: string } | { type: 'filter'; criteria: FilterCriteria } | { type: 'hydrate'; index: TradeIdx[] }
 type MsgOut =
   | { type: 'progress'; loaded: number }
   | { type: 'done'; data: AggregatesResult }
@@ -38,9 +38,14 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
       return
     }
     // aggregate
-    const { filePath } = ev.data
-    const res = await fetch(filePath)
-    if (!res.ok || !res.body) throw new Error(`Failed to fetch ${filePath}`)
+    const { filePath, altFileUrl } = ev.data
+    let res = await fetch(filePath).catch(() => null as any)
+    if (!res || !res.ok || !res.body) {
+      if (altFileUrl) {
+        res = await fetch(altFileUrl).catch(() => null as any)
+      }
+    }
+    if (!res || !res.ok || !res.body) throw new Error(`Failed to fetch dataset from both sources`)
 
     // Aggregate metrics
     const solverToStats = new Map<string, SolverStats>()
@@ -54,6 +59,7 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
     const tradesPreview: AggregatesResult['tradesPreview'] = []
     const index: TradeIdx[] = []
     const pairWise: Map<string, { wins: number; total: number }> = new Map()
+    const solverWinMargins: Map<string, number[]> = new Map()
     
     const processRecord = (tr: TradeRecord) => {
       totalTrades += 1
@@ -87,7 +93,15 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
           const blockHigh = blockHighUSDCPerBTC(tr.eventBlockPrices as any)
           if (winnerPrice != null && blockHigh != null) {
             const m = percentDiff(winnerPrice, blockHigh)
-            if (m != null) margins.push(m)
+            if (m != null) {
+              margins.push(m)
+              // capture winner-specific win margin
+              if (winner) {
+                const list = solverWinMargins.get(winner.solverAddress) ?? []
+                list.push(m * 100)
+                solverWinMargins.set(winner.solverAddress, list)
+              }
+            }
           }
           topSolutions = solutionPrices.slice(0, 5).map((x, i) => ({ solver: x.s.solverAddress, priceUSDCPerBTC: x.p, rank: i + 1 }))
         }
@@ -190,6 +204,23 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
 
     const m = summarize(marginPct)
     const p = summarize(participation)
+    // compute top-5 solver analytics
+    const solverStatsArr = Array.from(solverToStats.values()).sort((a,b) => b.wins - a.wins)
+    const top5 = solverStatsArr.slice(0, 5).map(s => {
+      const margins = solverWinMargins.get(s.solverAddress) || []
+      const avg = margins.length ? margins.reduce((a,b) => a+b, 0) / margins.length : null
+      const p50 = margins.length ? summarize(margins).p50 : null
+      return {
+        solverAddress: s.solverAddress,
+        wins: s.wins,
+        tradesParticipated: s.tradesParticipated,
+        winRate: s.tradesParticipated ? s.wins / s.tradesParticipated : 0,
+        volumeUSDC: s.volumeUSDC,
+        avgWinMarginPct: avg,
+        p50WinMarginPct: p50,
+      }
+    })
+
     const data: AggregatesResult = {
       totalTrades,
       totalNotionalUSDC,
@@ -198,8 +229,9 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
       marginHistogram,
       participationHistogram,
       dailySeries,
-      solverStats: Array.from(solverToStats.values()).sort((a,b) => b.wins - a.wins),
+      solverStats: solverStatsArr,
       rivalryMatrix: { solvers: topSolvers, matrix },
+      topSolverAnalytics: top5,
       tradesPreview: tradesPreview.slice(0, 200),
       participationStats: p,
       marginStats: { count: m.count, minPct: m.min, p25Pct: m.p25, p50Pct: m.p50, p75Pct: m.p75, maxPct: m.max, avgPct: m.avg }

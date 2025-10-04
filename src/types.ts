@@ -58,6 +58,15 @@ export interface AggregatesResult {
     solvers: string[]
     matrix: number[][] // win rate of row vs col when both participate
   }
+  topSolverAnalytics?: Array<{
+    solverAddress: string
+    wins: number
+    tradesParticipated: number
+    winRate: number
+    volumeUSDC: number
+    avgWinMarginPct: number | null
+    p50WinMarginPct: number | null
+  }>
   tradesPreview: Array<{
     orderUid: string
     timestamp: number
