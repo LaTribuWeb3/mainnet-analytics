@@ -158,6 +158,16 @@ function App() {
                   ))}
                 </tbody>
               </table>
+              {(() => {
+                const sumVolumes = data.solverStats.reduce((a, s) => a + (s.volumeUSDC || 0), 0)
+                const total = data.totalNotionalUSDC || 0
+                const diff = total ? ((sumVolumes - total) / total) * 100 : 0
+                return (
+                  <div className="muted" style={{ marginTop: 8 }}>
+                    Validation: sum(solver volumes) = {Math.round(sumVolumes).toLocaleString()} USDC • total notional = {Math.round(total).toLocaleString()} USDC • delta = {diff.toFixed(2)}%
+                  </div>
+                )
+              })()}
             </div>
 
             <div className="grid" style={{ marginTop: 16 }}>

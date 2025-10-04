@@ -74,14 +74,13 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
       if (participants === 1) singleBid += 1
 
       const priceUSDCPerBTC = computePriceUSDCPerBase(tr.sellToken, tr.buyToken, tr.sellAmount, tr.buyAmount)
-      if (priceUSDCPerBTC != null) {
-        const btc = tr.sellToken.toLowerCase() === TOKENS.WBTC
-          ? normalizeAmount(tr.sellAmount, tr.sellToken)
-          : tr.sellToken.toLowerCase() === TOKENS.WETH
-            ? normalizeAmount(tr.sellAmount, tr.sellToken)
-            : normalizeAmount(tr.buyAmount, tr.buyToken)
-        totalNotionalUSDC += btc * priceUSDCPerBTC
-      }
+      // Notional USDC using USDC side of the trade
+      const sellLc = tr.sellToken.toLowerCase()
+      const buyLc = tr.buyToken.toLowerCase()
+      let notionalUSDCForTrade = 0
+      if (sellLc === TOKENS.USDC) notionalUSDCForTrade = normalizeAmount(tr.sellAmount, tr.sellToken)
+      else if (buyLc === TOKENS.USDC) notionalUSDCForTrade = normalizeAmount(tr.buyAmount, tr.buyToken)
+      totalNotionalUSDC += notionalUSDCForTrade
 
       let winnerPrice: number | null = null
       let secondPrice: number | null = null
@@ -123,9 +122,7 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
         orderUid: tr.orderUid,
         timestamp: tr.eventBlockTimestamp,
         direction: tr.sellToken.toLowerCase() === TOKENS.USDC ? 'USDC_to_WBTC' : 'WBTC_to_USDC',
-        notionalUSDC: priceUSDCPerBTC != null ? (tr.sellToken.toLowerCase() === TOKENS.WBTC || tr.sellToken.toLowerCase() === TOKENS.WETH
-          ? normalizeAmount(tr.sellAmount, tr.sellToken) * priceUSDCPerBTC
-          : normalizeAmount(tr.buyAmount, tr.buyToken)) : 0,
+        notionalUSDC: notionalUSDCForTrade,
         participants,
         winner: winner?.solverAddress ?? 'unknown',
         winnerPriceUSDCPerBTC: winnerPrice,
@@ -142,9 +139,7 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
         orderUid: tr.orderUid,
         ts: tr.eventBlockTimestamp,
         direction: tr.sellToken.toLowerCase() === TOKENS.USDC ? 'USDC_to_WBTC' : 'WBTC_to_USDC',
-        notionalUSDC: priceUSDCPerBTC != null ? (tr.sellToken.toLowerCase() === TOKENS.WBTC || tr.sellToken.toLowerCase() === TOKENS.WETH
-          ? normalizeAmount(tr.sellAmount, tr.sellToken) * priceUSDCPerBTC
-          : normalizeAmount(tr.buyAmount, tr.buyToken)) : 0,
+        notionalUSDC: notionalUSDCForTrade,
         participants,
         priceMarginPct: (() => {
           const bench = selectBenchmark(tr.eventBlockPrices as any, 'high')
@@ -158,27 +153,35 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
       if (winnerPrice != null) {
         const benchmark = blockHighUSDCPerBase(tr.eventBlockPrices as any)
         if (benchmark != null) {
-          const baseAmount = tr.sellToken.toLowerCase() === TOKENS.WBTC || tr.sellToken.toLowerCase() === TOKENS.WETH
-            ? normalizeAmount(tr.sellAmount, tr.sellToken)
-            : normalizeAmount(tr.buyAmount, tr.buyToken) / winnerPrice
-          const gross = (winnerPrice - benchmark) * baseAmount // USDC per base * base qty = USDC
-          // Fee: WETH only, approximate using winnerPrice to value gas in USDC
-          let feeUSDC = 0
-          if (tr.sellToken.toLowerCase() === TOKENS.WETH || tr.buyToken.toLowerCase() === TOKENS.WETH) {
-            // txFeeWei is in wei; convert to WETH (1e18) then to USDC using winnerPrice if base is WETH
-            const feeETH = Number(tr.txFeeWei) / 1e18
-            // winnerPrice is USDC per base; if base is WETH, use directly; if base is WBTC, skip fee
-            if (tr.sellToken.toLowerCase() === TOKENS.WETH || tr.buyToken.toLowerCase() === TOKENS.WETH) {
-              feeUSDC = feeETH * winnerPrice
+          const sellTokenLc = tr.sellToken.toLowerCase()
+          const buyTokenLc = tr.buyToken.toLowerCase()
+          const isSellBase = sellTokenLc === TOKENS.WBTC || sellTokenLc === TOKENS.WETH
+          const isBuyBase = buyTokenLc === TOKENS.WBTC || buyTokenLc === TOKENS.WETH
+          let baseQty = 0
+          if (isSellBase) baseQty = normalizeAmount(tr.sellAmount, tr.sellToken)
+          else if (isBuyBase) baseQty = normalizeAmount(tr.buyAmount, tr.buyToken)
+          if (baseQty > 0) {
+            const improvement = isSellBase ? (winnerPrice - benchmark) : (benchmark - winnerPrice)
+            let gross = improvement * baseQty
+            if (gross < 0) gross = 0 // show as positive only
+
+            // Fee: WETH only, approximate using winnerPrice to value gas in USDC
+            let feeUSDC = 0
+            if (sellTokenLc === TOKENS.WETH || buyTokenLc === TOKENS.WETH) {
+              const feeETH = Number(tr.txFeeWei) / 1e18
+              // we only have winnerPrice for base, if base is WETH we can value fee
+              if (sellTokenLc === TOKENS.WETH || buyTokenLc === TOKENS.WETH) {
+                feeUSDC = feeETH * winnerPrice
+              }
             }
-          }
-          const withFees = gross - feeUSDC
-          const noFees = gross
-          profitsWithFees.push(withFees)
-          profitsNoFees.push(noFees)
-          if (winner) {
-            profitBySolverWithFees.set(winner.solverAddress, (profitBySolverWithFees.get(winner.solverAddress) ?? 0) + withFees)
-            profitBySolverNoFees.set(winner.solverAddress, (profitBySolverNoFees.get(winner.solverAddress) ?? 0) + noFees)
+            const withFees = Math.max(0, gross - feeUSDC)
+            const noFees = gross
+            profitsWithFees.push(withFees)
+            profitsNoFees.push(noFees)
+            if (winner) {
+              profitBySolverWithFees.set(winner.solverAddress, (profitBySolverWithFees.get(winner.solverAddress) ?? 0) + withFees)
+              profitBySolverNoFees.set(winner.solverAddress, (profitBySolverNoFees.get(winner.solverAddress) ?? 0) + noFees)
+            }
           }
         }
       }
@@ -193,13 +196,7 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
       if (winner) {
         const st = solverToStats.get(winner.solverAddress)!
         st.wins += 1
-        const p = priceUSDCPerBTC
-        if (p != null) {
-          const btc = tr.sellToken.toLowerCase() === TOKENS.WBTC
-            ? normalizeAmount(tr.sellAmount, tr.sellToken)
-            : normalizeAmount(tr.buyAmount, tr.buyToken)
-          st.volumeUSDC += btc * p
-        }
+        st.volumeUSDC += notionalUSDCForTrade
 
         // rivalry: pairwise for all co-participants
         const solvers = Array.from(new Set(tr.competitionSolutions.map(s => s.solverAddress)))
