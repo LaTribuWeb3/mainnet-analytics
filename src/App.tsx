@@ -41,7 +41,11 @@ function App() {
     // Use relative path first; provide optional external URL as fallback via ?dataUrl= query
     const params = new URLSearchParams(location.search)
     // Try API first by default; allow alternate via ?pair= param
-    const pair = (params.get('pair') || 'wbtc').toLowerCase() as 'wbtc' | 'weth'
+    const [pair, setPairFromQuery] = (() => {
+      const p = (params.get('pair') || 'wbtc').toLowerCase()
+      if (p !== 'wbtc' && p !== 'weth') params.set('pair', 'wbtc')
+      return [ (p === 'weth' ? 'weth' : 'wbtc') as 'wbtc' | 'weth', p ]
+    })()
     const localPath = pair === 'weth' ? '/data/usdc-weth-trades.enriched-prices7.json' : '/data/usdc-wbtc-trades.enriched-prices9.json'
     const apiFile = pair === 'weth' ? 'usdc-weth-trades.enriched-prices.json' : 'usdc-wbtc-trades.enriched-prices.json'
     const apiUrlDefault = `https://prod.mainnet.cowswap.la-tribu.xyz/api/data/${apiFile}`
@@ -110,6 +114,21 @@ function App() {
                 </label>
                 <label>Min Notional (USDC) <input type="number" placeholder="e.g. 100000" value={minNotional} onChange={e => setMinNotional(e.target.value)} /></label>
                 <label>Max Notional (USDC) <input type="number" placeholder="e.g. 10000000" value={maxNotional} onChange={e => setMaxNotional(e.target.value)} /></label>
+                <label>Dataset
+                  <select defaultValue={(new URLSearchParams(location.search).get('pair') || 'wbtc').toLowerCase()} onChange={e => {
+                    const pair = e.target.value
+                    const params = new URLSearchParams(location.search)
+                    params.set('pair', pair)
+                    const apiFile = pair === 'weth' ? 'usdc-weth-trades.enriched-prices.json' : 'usdc-wbtc-trades.enriched-prices.json'
+                    const primaryUrl = params.get('dataUrl') || `https://prod.mainnet.cowswap.la-tribu.xyz/api/data/${apiFile}`
+                    const localPath = pair === 'weth' ? '/data/usdc-weth-trades.enriched-prices7.json' : '/data/usdc-wbtc-trades.enriched-prices9.json'
+                    workerRef.current?.postMessage({ type: 'aggregate', filePath: primaryUrl, altFileUrl: localPath })
+                    history.replaceState(null, '', `${location.pathname}?${params.toString()}`)
+                  }}>
+                    <option value="wbtc">USDC-WBTC</option>
+                    <option value="weth">USDC-WETH</option>
+                  </select>
+                </label>
                 <label>Include fees (WETH only)
                   <input type="checkbox" checked={includeFees} onChange={e => setIncludeFees(e.target.checked)} />
                 </label>
