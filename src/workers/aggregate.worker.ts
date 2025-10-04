@@ -79,7 +79,7 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
       participation.push(participants)
       if (participants === 1) singleBid += 1
 
-      const priceUSDCPerBTC = computePriceUSDCPerBase(tr.sellToken, tr.buyToken, tr.sellAmount, tr.buyAmount)
+      const priceUSDCPerBTC = computePriceUSDCPerBase(tr.sellToken, tr.buyToken, tr.sellAmount, tr.buyAmount) // used later for preview and profit calcs
       // Notional USDC using USDC side of the trade
       const sellLc = tr.sellToken.toLowerCase()
       const buyLc = tr.buyToken.toLowerCase()
@@ -261,7 +261,6 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
       const margins = solverWinMargins.get(s.solverAddress) || []
       const avg = margins.length ? margins.reduce((a,b) => a+b, 0) / margins.length : null
       const p50 = margins.length ? summarize(margins).p50 : null
-      const profitBySolver = new Map<string, number>()
       for (const s of solverStatsArr) {
         const withFees = profitBySolverWithFees.get(s.solverAddress)
         const noFees = profitBySolverNoFees.get(s.solverAddress)

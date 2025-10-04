@@ -41,10 +41,10 @@ function App() {
     // Use relative path first; provide optional external URL as fallback via ?dataUrl= query
     const params = new URLSearchParams(location.search)
     // Try API first by default; allow alternate via ?pair= param
-    const [pair, setPairFromQuery] = (() => {
+    const pair = (() => {
       const p = (params.get('pair') || 'wbtc').toLowerCase()
       if (p !== 'wbtc' && p !== 'weth') params.set('pair', 'wbtc')
-      return [ (p === 'weth' ? 'weth' : 'wbtc') as 'wbtc' | 'weth', p ]
+      return (p === 'weth' ? 'weth' : 'wbtc') as 'wbtc' | 'weth'
     })()
     const localPath = pair === 'weth' ? '/data/usdc-weth-trades.enriched-prices7.json' : '/data/usdc-wbtc-trades.enriched-prices9.json'
     const apiFile = pair === 'weth' ? 'usdc-weth-trades.enriched-prices.json' : 'usdc-wbtc-trades.enriched-prices.json'
