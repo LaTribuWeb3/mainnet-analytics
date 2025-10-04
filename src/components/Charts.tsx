@@ -1,19 +1,34 @@
-import React from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 
-export function BarChart({ data, xKey, yKey, height = 180, yLabel }: { data: Array<Record<string, any>>; xKey: string; yKey: string; height?: number; yLabel?: string }) {
+export function BarChart({ data, xKey, yKey, height = 180, yLabel, labelFormatter }: { data: Array<Record<string, any>>; xKey: string; yKey: string; height?: number; yLabel?: string; labelFormatter?: (s: string) => string }) {
   const max = Math.max(1, ...data.map(d => Number(d[yKey]) || 0))
-  const barW = Math.max(16, Math.min(48, Math.floor(700 / Math.max(1, data.length))))
+  const barsRef = useRef<HTMLDivElement | null>(null)
+  const [containerW, setContainerW] = useState<number>(600)
+  useEffect(() => {
+    const el = barsRef.current
+    if (!el) return
+    const update = () => setContainerW(el.clientWidth)
+    update()
+    const ro = new ResizeObserver(() => update())
+    ro.observe(el)
+    window.addEventListener('resize', update)
+    return () => { ro.disconnect(); window.removeEventListener('resize', update) }
+  }, [])
+  const gap = 8
+  const barW = Math.max(8, Math.min(40, Math.floor((containerW - gap * Math.max(0, data.length - 1)) / Math.max(1, data.length))))
   return (
     <div style={{ display: 'grid', gridTemplateColumns: `24px 1fr`, gap: 8 }}>
       <div style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', color: '#9ca3af', fontSize: 12, alignSelf: 'center' }}>{yLabel || 'count'}</div>
-      <div style={{ display: 'flex', alignItems: 'end', gap: 8, height }}>
+      <div ref={barsRef} style={{ display: 'flex', alignItems: 'end', gap, height, width: '100%', overflowX: 'hidden', overflowY: 'visible' }}>
         {data.map((d, i) => {
           const v = Number(d[yKey]) || 0
           const h = Math.round((v / max) * (height - 24))
           return (
             <div key={i} title={`${d[xKey]}: ${v}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <div style={{ width: barW, height: h, background: 'linear-gradient(180deg,#7ab8ff,#4f86e6)', borderRadius: 6 }} />
-              <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 6, transform: 'rotate(45deg)', transformOrigin: 'top left' }}>{String(d[xKey])}</div>
+              <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 6, width: barW, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {labelFormatter ? labelFormatter(String(d[xKey])) : String(d[xKey])}
+              </div>
             </div>
           )
         })}

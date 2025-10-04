@@ -40,7 +40,10 @@ function App() {
     // Use relative path first; provide optional external URL as fallback via ?dataUrl= query
     const params = new URLSearchParams(location.search)
     const altFileUrl = params.get('dataUrl') || undefined
-    w.postMessage({ type: 'aggregate', filePath: '/data/usdc-wbtc-trades.enriched-prices9.json', altFileUrl })
+    // Try WBTC dataset by default; allow alternate via ?pair= param
+    const pair = (params.get('pair') || 'wbtc').toLowerCase()
+    const localPath = pair === 'weth' ? '/data/usdc-weth-trades.enriched-prices7.json' : '/data/usdc-wbtc-trades.enriched-prices9.json'
+    w.postMessage({ type: 'aggregate', filePath: localPath, altFileUrl })
     return () => { w.terminate() }
   }, [])
 
@@ -73,7 +76,7 @@ function App() {
             <div className="muted">Parsing data… This may take a moment.</div>
             <div className="progress" style={{ marginTop: 8 }}><div style={{ width: progress ? '20%' : '5%' }} /></div>
             <div className="muted" style={{ marginTop: 8 }}>
-              Serving from <code>data/usdc-wbtc-trades.enriched-prices9.json</code>. To provide a remote URL fallback, open with <code>?dataUrl=https://example.com/file.json</code>.
+              Serving dataset from <code>?pair=wbtc|weth</code> (default wbtc). Local files: <code>data/usdc-wbtc-trades.enriched-prices9.json</code> or <code>data/usdc-weth-trades.enriched-prices7.json</code>. Remote fallback: <code>?dataUrl=https://example.com/file.json</code>.
             </div>
           </div>
         )}
@@ -152,7 +155,7 @@ function App() {
             </div>
 
             <div className="grid" style={{ marginTop: 16 }}>
-              <div className="panel" style={{ gridColumn: 'span 6' }}>
+              <div className="panel" style={{ gridColumn: 'span 12' }}>
                 <h3>Participation Distribution</h3>
                 {data.participationStats && (
                   <div className="muted" style={{ marginBottom: 8 }}>
@@ -169,7 +172,7 @@ function App() {
                 )}
                 <BarChart data={data.participationHistogram} xKey="bucket" yKey="count" yLabel="trades" />
               </div>
-              <div className="panel" style={{ gridColumn: 'span 6' }}>
+              <div className="panel" style={{ gridColumn: 'span 12', marginTop: 16 }}>
                 <h3>Winner Margin Distribution (%)</h3>
                 {data.marginStats && (
                   <div className="muted" style={{ marginBottom: 8 }}>
@@ -184,7 +187,13 @@ function App() {
                     <span title="75th percentile percent difference">p75={data.marginStats.p75Pct.toFixed(2)}%</span>
                   </div>
                 )}
-                <BarChart data={data.marginHistogram} xKey="bucket" yKey="count" yLabel="trades" />
+                <BarChart
+                  data={data.marginHistogram}
+                  xKey="bucket"
+                  yKey="count"
+                  yLabel="trades"
+                  labelFormatter={(s) => s.replace(/-/g, '−')}
+                />
               </div>
             </div>
 

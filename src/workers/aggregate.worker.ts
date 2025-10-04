@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import { computePriceUSDCPerBTC, blockMidUSDCPerBTC, blockHighUSDCPerBTC, normalizeAmount, TOKENS, toDay, percentDiff, higherPriceIsBetterUSDCPerBTC } from '../utils/price'
+import { computePriceUSDCPerBase, blockMidUSDCPerBase, blockHighUSDCPerBase, normalizeAmount, TOKENS, toDay, percentDiff, higherPriceIsBetterUSDCPerBase } from '../utils/price'
 import type { AggregatesResult, TradeRecord, SolverStats } from '../types'
 
 type FilterCriteria = { fromTs?: number; toTs?: number; direction?: 'USDC_to_WBTC' | 'WBTC_to_USDC' | 'ALL'; minNotional?: number; maxNotional?: number }
@@ -69,11 +69,13 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
       participation.push(participants)
       if (participants === 1) singleBid += 1
 
-      const priceUSDCPerBTC = computePriceUSDCPerBTC(tr.sellToken, tr.buyToken, tr.sellAmount, tr.buyAmount)
+      const priceUSDCPerBTC = computePriceUSDCPerBase(tr.sellToken, tr.buyToken, tr.sellAmount, tr.buyAmount)
       if (priceUSDCPerBTC != null) {
         const btc = tr.sellToken.toLowerCase() === TOKENS.WBTC
           ? normalizeAmount(tr.sellAmount, tr.sellToken)
-          : normalizeAmount(tr.buyAmount, tr.buyToken)
+          : tr.sellToken.toLowerCase() === TOKENS.WETH
+            ? normalizeAmount(tr.sellAmount, tr.sellToken)
+            : normalizeAmount(tr.buyAmount, tr.buyToken)
         totalNotionalUSDC += btc * priceUSDCPerBTC
       }
 
@@ -82,15 +84,15 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
       let topSolutions: Array<{ solver: string; priceUSDCPerBTC: number | null; rank: number }> | undefined
       if (winner) {
         const solutionPrices = tr.competitionSolutions
-          .map(s => ({ s, p: computePriceUSDCPerBTC(s.order.sellToken, s.order.buyToken, s.order.sellAmount, s.order.buyAmount) }))
+          .map(s => ({ s, p: computePriceUSDCPerBase(s.order.sellToken, s.order.buyToken, s.order.sellAmount, s.order.buyAmount) }))
           .filter(x => x.p != null) as Array<{ s: typeof winner; p: number }>
 
         if (solutionPrices.length > 0) {
-          const higherIsBetter = higherPriceIsBetterUSDCPerBTC(tr.sellToken, tr.buyToken) ?? true
+          const higherIsBetter = higherPriceIsBetterUSDCPerBase(tr.sellToken, tr.buyToken) ?? true
           solutionPrices.sort((a, b) => higherIsBetter ? b.p - a.p : a.p - b.p)
           winnerPrice = solutionPrices.find(x => x.s.isWinner)?.p ?? null
           // compute margin vs block high
-          const blockHigh = blockHighUSDCPerBTC(tr.eventBlockPrices as any)
+          const blockHigh = blockHighUSDCPerBase(tr.eventBlockPrices as any)
           if (winnerPrice != null && blockHigh != null) {
             const m = percentDiff(winnerPrice, blockHigh)
             if (m != null) {
@@ -117,7 +119,7 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
         orderUid: tr.orderUid,
         timestamp: tr.eventBlockTimestamp,
         direction: tr.sellToken.toLowerCase() === TOKENS.USDC ? 'USDC_to_WBTC' : 'WBTC_to_USDC',
-        notionalUSDC: priceUSDCPerBTC != null ? (tr.sellToken.toLowerCase() === TOKENS.WBTC
+        notionalUSDC: priceUSDCPerBTC != null ? (tr.sellToken.toLowerCase() === TOKENS.WBTC || tr.sellToken.toLowerCase() === TOKENS.WETH
           ? normalizeAmount(tr.sellAmount, tr.sellToken) * priceUSDCPerBTC
           : normalizeAmount(tr.buyAmount, tr.buyToken)) : 0,
         participants,
@@ -125,7 +127,7 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
         winnerPriceUSDCPerBTC: winnerPrice,
         secondBestPriceUSDCPerBTC: secondPrice,
         priceMarginPct: (() => {
-          const blockHigh = blockHighUSDCPerBTC(tr.eventBlockPrices as any)
+          const blockHigh = blockHighUSDCPerBase(tr.eventBlockPrices as any)
           return (winnerPrice != null && blockHigh != null) ? percentDiff(winnerPrice, blockHigh) : null
         })(),
         topSolutions,
@@ -136,12 +138,12 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
         orderUid: tr.orderUid,
         ts: tr.eventBlockTimestamp,
         direction: tr.sellToken.toLowerCase() === TOKENS.USDC ? 'USDC_to_WBTC' : 'WBTC_to_USDC',
-        notionalUSDC: priceUSDCPerBTC != null ? (tr.sellToken.toLowerCase() === TOKENS.WBTC
+        notionalUSDC: priceUSDCPerBTC != null ? (tr.sellToken.toLowerCase() === TOKENS.WBTC || tr.sellToken.toLowerCase() === TOKENS.WETH
           ? normalizeAmount(tr.sellAmount, tr.sellToken) * priceUSDCPerBTC
           : normalizeAmount(tr.buyAmount, tr.buyToken)) : 0,
         participants,
         priceMarginPct: (() => {
-          const blockHigh = blockHighUSDCPerBTC(tr.eventBlockPrices as any)
+          const blockHigh = blockHighUSDCPerBase(tr.eventBlockPrices as any)
           return (winnerPrice != null && blockHigh != null) ? percentDiff(winnerPrice, blockHigh) : null
         })(),
         winner: winner?.solverAddress ?? 'unknown',
@@ -188,7 +190,16 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
     for (const tr of arr) processRecord(tr)
 
     const marginPct = margins.map(x => x * 100)
-    const marginHistogram = bucketize(marginPct, [-50, -20, -10, -5, -2, -1, 0, 1, 2, 5, 10, 20, 50])
+    const marginHistogram = bucketize(
+      marginPct,
+      [
+        -50, -20, -10, -5, -2, -1,
+        -0.5, -0.2, -0.1, -0.05, -0.02, -0.01,
+        0,
+        0.01, 0.02, 0.05, 0.1, 0.2, 0.5,
+        1, 2, 5, 10, 20, 50
+      ]
+    )
     const participationHistogram = bucketize(participation, [1,2,3,4,5,6,8,10,12,16,20])
     const dailySeries = Array.from(dayToData.entries()).sort((a,b) => a[0].localeCompare(b[0])).map(([day, d]) => ({ day, trades: d.trades, avgParticipants: d.participants / d.trades }))
 
