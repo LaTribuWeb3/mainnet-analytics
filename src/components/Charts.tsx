@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 export function BarChart({ data, xKey, yKey, height = 180, yLabel, labelFormatter }: { data: Array<Record<string, any>>; xKey: string; yKey: string; height?: number; yLabel?: string; labelFormatter?: (s: string) => string }) {
   const max = Math.max(1, ...data.map(d => Number(d[yKey]) || 0))
@@ -54,7 +54,6 @@ export function LineChart({ points, height = 160 }: { points: Array<{ x: string;
 }
 
 export function Matrix({ labels, matrix }: { labels: string[]; matrix: number[][] }) {
-  const size = labels.length
   return (
     <table className="table">
       <thead>

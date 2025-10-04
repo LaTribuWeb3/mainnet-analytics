@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import { computePriceUSDCPerBase, blockMidUSDCPerBase, blockHighUSDCPerBase, normalizeAmount, TOKENS, toDay, percentDiff, higherPriceIsBetterUSDCPerBase } from '../utils/price'
+import { computePriceUSDCPerBase, blockHighUSDCPerBase, normalizeAmount, TOKENS, toDay, percentDiff, higherPriceIsBetterUSDCPerBase } from '../utils/price'
 import type { AggregatesResult, TradeRecord, SolverStats } from '../types'
 
 type FilterCriteria = { fromTs?: number; toTs?: number; direction?: 'USDC_to_WBTC' | 'WBTC_to_USDC' | 'ALL'; minNotional?: number; maxNotional?: number }
