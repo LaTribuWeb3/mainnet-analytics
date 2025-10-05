@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import type { AggregatesResult } from './types'
-import { BarChart, Matrix } from './components/Charts'
+import { BarChart } from './components/Charts'
 import { solverLabel } from './utils/solvers'
 
 function App() {
@@ -235,6 +235,70 @@ function App() {
               </div>
             </div>
 
+            {data.sizeHistogram && (
+              <div className="panel" style={{ marginTop: 16 }}>
+                <h3>Trade Size Distribution (USDC notional)</h3>
+                {data.sizeStats && (
+                  <div className="muted" style={{ marginBottom: 8 }}>
+                    <span title="Number of trades included">n={data.sizeStats.count}</span>
+                    <span style={{ margin: '0 6px' }}>•</span>
+                    <span title="Average USDC notional">avg={Math.round(data.sizeStats.avgUSDC).toLocaleString()}</span>
+                    <span style={{ margin: '0 6px' }}>•</span>
+                    <span title="Median (USDC)">p50={Math.round(data.sizeStats.p50USDC).toLocaleString()}</span>
+                    <span style={{ margin: '0 6px' }}>•</span>
+                    <span title="25th percentile (USDC)">p25={Math.round(data.sizeStats.p25USDC).toLocaleString()}</span>
+                    <span style={{ margin: '0 6px' }}>•</span>
+                    <span title="75th percentile (USDC)">p75={Math.round(data.sizeStats.p75USDC).toLocaleString()}</span>
+                  </div>
+                )}
+                <BarChart data={data.sizeHistogram} xKey="bucket" yKey="count" yLabel="trades" />
+              </div>
+            )}
+
+            {(data.singleBidSizeHistogram || data.singleBidSolverLeaderboard) && (
+              <div className="panel" style={{ marginTop: 16 }}>
+                <h3>Single-bid Trades</h3>
+                {data.singleBidStats && (
+                  <div className="muted" style={{ marginBottom: 8 }}>
+                    <span title="Number of single-bid trades">n={data.singleBidStats.count}</span>
+                    <span style={{ margin: '0 6px' }}>•</span>
+                    <span title="Average notional (USDC)">avg={Math.round(data.singleBidStats.avgUSDC).toLocaleString()}</span>
+                    <span style={{ margin: '0 6px' }}>•</span>
+                    <span title="Median (USDC)">p50={Math.round(data.singleBidStats.p50USDC).toLocaleString()}</span>
+                    <span style={{ margin: '0 6px' }}>•</span>
+                    <span title="25th percentile (USDC)">p25={Math.round(data.singleBidStats.p25USDC).toLocaleString()}</span>
+                    <span style={{ margin: '0 6px' }}>•</span>
+                    <span title="75th percentile (USDC)">p75={Math.round(data.singleBidStats.p75USDC).toLocaleString()}</span>
+                  </div>
+                )}
+                {data.singleBidSizeHistogram && (
+                  <BarChart data={data.singleBidSizeHistogram} xKey="bucket" yKey="count" yLabel="trades" />
+                )}
+                {data.singleBidSolverLeaderboard && (
+                  <div style={{ marginTop: 16 }}>
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th>Solver</th>
+                          <th>Single-bid wins</th>
+                          <th>Single-bid volume (USDC)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {data.singleBidSolverLeaderboard.map(s => (
+                          <tr key={s.solverAddress}>
+                            <td><code title={s.solverAddress}>{solverLabel(s.solverAddress)}</code></td>
+                            <td>{s.singleBidWins}</td>
+                            <td>{Math.round(s.singleBidVolumeUSDC).toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
             {(data.profitStatsWithFees || data.profitStatsNoFees) && (
               <div className="panel" style={{ marginTop: 16 }}>
                 <h3>Estimated Profit (USDC)</h3>
@@ -257,12 +321,7 @@ function App() {
               </div>
             )}
 
-            {data.rivalryMatrix && (
-              <div className="panel" style={{ marginTop: 16 }}>
-                <h3>Rivalry Matrix (row win rate vs col)</h3>
-                <Matrix labels={data.rivalryMatrix.solvers.map(solverLabel)} matrix={data.rivalryMatrix.matrix} />
-              </div>
-            )}
+            {/* Rivalry Matrix removed per request */}
 
             {data.topSolverAnalytics && data.topSolverAnalytics.length > 0 && (
               <div className="panel" style={{ marginTop: 16 }}>

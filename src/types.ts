@@ -54,6 +54,7 @@ export interface AggregatesResult {
   singleBidShare: number
   marginHistogram: Array<{ bucket: string; count: number }>
   participationHistogram: Array<{ bucket: string; count: number }>
+  sizeHistogram?: Array<{ bucket: string; count: number }>
   dailySeries: DailySeriesPoint[]
   solverStats: SolverStats[]
   rivalryMatrix?: {
@@ -85,6 +86,26 @@ export interface AggregatesResult {
     p50USDC: number
     p75USDC: number
   }
+  sizeStats?: {
+    count: number
+    avgUSDC: number
+    p25USDC: number
+    p50USDC: number
+    p75USDC: number
+  }
+  singleBidSizeHistogram?: Array<{ bucket: string; count: number }>
+  singleBidStats?: {
+    count: number
+    avgUSDC: number
+    p25USDC: number
+    p50USDC: number
+    p75USDC: number
+  }
+  singleBidSolverLeaderboard?: Array<{
+    solverAddress: string
+    singleBidWins: number
+    singleBidVolumeUSDC: number
+  }>
   tradesPreview: Array<{
     orderUid: string
     timestamp: number

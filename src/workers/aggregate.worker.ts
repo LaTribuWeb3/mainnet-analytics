@@ -241,6 +241,22 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
       ]
     )
     const participationHistogram = bucketize(participation, [1,2,3,4,5,6,8,10,12,16,20])
+    // Size buckets (USDC notional) in powers of 10 and some mid-steps
+    const sizeBuckets = [0, 1e3, 5e3, 1e4, 2.5e4, 5e4, 1e5, 2.5e5, 5e5, 1e6, 2.5e6, 5e6, 1e7, 2.5e7, 5e7, 1e8]
+    const sizeHistogram = bucketize(tradesPreview.map(t => t.notionalUSDC), sizeBuckets)
+    const sizeStats = summarize(tradesPreview.map(t => t.notionalUSDC))
+    // Single-bid distributions and leaderboard
+    const singleBidTrades = tradesPreview.filter(t => t.participants === 1)
+    const singleBidSizeHistogram = bucketize(singleBidTrades.map(t => t.notionalUSDC), sizeBuckets)
+    const sbStats = summarize(singleBidTrades.map(t => t.notionalUSDC))
+    const singleBidSolverLeaderboardMap = new Map<string, { wins: number; vol: number }>()
+    for (const t of singleBidTrades) {
+      const rec = singleBidSolverLeaderboardMap.get(t.winner) ?? { wins: 0, vol: 0 }
+      rec.wins += 1
+      rec.vol += t.notionalUSDC
+      singleBidSolverLeaderboardMap.set(t.winner, rec)
+    }
+    const singleBidSolverLeaderboard = Array.from(singleBidSolverLeaderboardMap.entries()).sort((a,b) => b[1].wins - a[1].wins).slice(0, 15).map(([solverAddress, r]) => ({ solverAddress, singleBidWins: r.wins, singleBidVolumeUSDC: r.vol }))
     const dailySeries = Array.from(dayToData.entries()).sort((a,b) => a[0].localeCompare(b[0])).map(([day, d]) => ({ day, trades: d.trades, avgParticipants: d.participants / d.trades }))
 
     // build rivalry matrix for top solvers by wins
@@ -288,6 +304,7 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
       singleBidShare: totalTrades ? singleBid / totalTrades : 0,
       marginHistogram,
       participationHistogram,
+      sizeHistogram,
       dailySeries,
       solverStats: solverStatsArr,
       rivalryMatrix: { solvers: topSolvers, matrix },
@@ -296,7 +313,11 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
       participationStats: p,
       marginStats: { count: m.count, minPct: m.min, p25Pct: m.p25, p50Pct: m.p50, p75Pct: m.p75, maxPct: m.max, avgPct: m.avg },
       profitStatsWithFees: { count: profFees.count, totalUSDC: profitsWithFees.reduce((a,b)=>a+b,0), avgUSDC: profFees.avg, p25USDC: profFees.p25, p50USDC: profFees.p50, p75USDC: profFees.p75 },
-      profitStatsNoFees: { count: profNoFees.count, totalUSDC: profitsNoFees.reduce((a,b)=>a+b,0), avgUSDC: profNoFees.avg, p25USDC: profNoFees.p25, p50USDC: profNoFees.p50, p75USDC: profNoFees.p75 }
+      profitStatsNoFees: { count: profNoFees.count, totalUSDC: profitsNoFees.reduce((a,b)=>a+b,0), avgUSDC: profNoFees.avg, p25USDC: profNoFees.p25, p50USDC: profNoFees.p50, p75USDC: profNoFees.p75 },
+      sizeStats: { count: sizeStats.count, avgUSDC: sizeStats.avg, p25USDC: sizeStats.p25, p50USDC: sizeStats.p50, p75USDC: sizeStats.p75 },
+      singleBidSizeHistogram,
+      singleBidStats: { count: sbStats.count, avgUSDC: sbStats.avg, p25USDC: sbStats.p25, p50USDC: sbStats.p50, p75USDC: sbStats.p75 },
+      singleBidSolverLeaderboard
     }
     GLOBAL_INDEX = index
     ctx.postMessage({ type: 'done', data } satisfies MsgOut)
