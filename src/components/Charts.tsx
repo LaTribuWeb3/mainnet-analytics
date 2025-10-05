@@ -15,7 +15,7 @@ export function BarChart({ data, xKey, yKey, height = 180, yLabel, labelFormatte
     return () => { ro.disconnect(); window.removeEventListener('resize', update) }
   }, [])
   const gap = 8
-  const barW = Math.max(8, Math.min(40, Math.floor((containerW - gap * Math.max(0, data.length - 1)) / Math.max(1, data.length))))
+  const barW = Math.max(12, Math.floor((containerW - gap * Math.max(0, data.length - 1)) / Math.max(1, data.length)))
   return (
     <div style={{ display: 'grid', gridTemplateColumns: `24px 1fr`, gap: 8 }}>
       <div style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', color: '#9ca3af', fontSize: 12, alignSelf: 'center' }}>{yLabel || 'count'}</div>
