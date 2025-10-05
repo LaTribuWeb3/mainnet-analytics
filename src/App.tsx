@@ -3,6 +3,7 @@ import './App.css'
 import type { AggregatesResult } from './types'
 import { BarChart } from './components/Charts'
 import { solverLabel } from './utils/solvers'
+import { formatUSDCCompact, formatRangeBucketLabel } from './utils/format'
 
 function App() {
   const [data, setData] = useState<AggregatesResult | null>(null)
@@ -142,7 +143,7 @@ function App() {
               </div>
               <div className="panel kpi">
                 <h3>Total Notional (USDC)</h3>
-                <div className="val">{Math.round(data.totalNotionalUSDC).toLocaleString()}</div>
+                <div className="val" title={Math.round(data.totalNotionalUSDC).toLocaleString()}>{formatUSDCCompact(data.totalNotionalUSDC)}</div>
               </div>
               <div className="panel kpi">
                 <h3>Avg Participants</h3>
@@ -173,9 +174,9 @@ function App() {
                       <td><code title={s.solverAddress}>{solverLabel(s.solverAddress)}</code></td>
                       <td>{s.wins}</td>
                       <td>{s.tradesParticipated}</td>
-                      <td>{Math.round(s.volumeUSDC).toLocaleString()}</td>
+                      <td title={Math.round(s.volumeUSDC).toLocaleString()}>{formatUSDCCompact(s.volumeUSDC)}</td>
                       <td>{(s.wins / Math.max(1, s.tradesParticipated) * 100).toFixed(1)}%</td>
-                        <td>{s.profitUSDCWithFees != null || s.profitUSDCNoFees != null ? Math.round((includeFees ? (s.profitUSDCWithFees ?? 0) : (s.profitUSDCNoFees ?? 0))).toLocaleString() : '-'}</td>
+                        <td>{s.profitUSDCWithFees != null || s.profitUSDCNoFees != null ? formatUSDCCompact((includeFees ? (s.profitUSDCWithFees ?? 0) : (s.profitUSDCNoFees ?? 0))) : '-'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -186,7 +187,7 @@ function App() {
                 const diff = total ? ((sumVolumes - total) / total) * 100 : 0
                 return (
                   <div className="muted" style={{ marginTop: 8 }}>
-                    Validation: sum(solver volumes) = {Math.round(sumVolumes).toLocaleString()} USDC • total notional = {Math.round(total).toLocaleString()} USDC • delta = {diff.toFixed(2)}%
+                    Validation: sum(solver volumes) = <span title={Math.round(sumVolumes).toLocaleString()}>{formatUSDCCompact(sumVolumes)}</span> USDC • total notional = <span title={Math.round(total).toLocaleString()}>{formatUSDCCompact(total)}</span> USDC • delta = {diff.toFixed(2)}%
                   </div>
                 )
               })()}
@@ -236,43 +237,46 @@ function App() {
             </div>
 
             {data.sizeHistogram && (
-              <div className="panel" style={{ marginTop: 16 }}>
+              <div className="grid" style={{ marginTop: 16 }}>
+              <div className="panel" style={{ gridColumn: 'span 12' }}>
                 <h3>Trade Size Distribution (USDC notional)</h3>
                 {data.sizeStats && (
                   <div className="muted" style={{ marginBottom: 8 }}>
                     <span title="Number of trades included">n={data.sizeStats.count}</span>
                     <span style={{ margin: '0 6px' }}>•</span>
-                    <span title="Average USDC notional">avg={Math.round(data.sizeStats.avgUSDC).toLocaleString()}</span>
+                    <span title={Math.round(data.sizeStats.avgUSDC).toLocaleString()}>avg={formatUSDCCompact(data.sizeStats.avgUSDC)}</span>
                     <span style={{ margin: '0 6px' }}>•</span>
-                    <span title="Median (USDC)">p50={Math.round(data.sizeStats.p50USDC).toLocaleString()}</span>
+                    <span title={Math.round(data.sizeStats.p50USDC).toLocaleString()}>p50={formatUSDCCompact(data.sizeStats.p50USDC)}</span>
                     <span style={{ margin: '0 6px' }}>•</span>
-                    <span title="25th percentile (USDC)">p25={Math.round(data.sizeStats.p25USDC).toLocaleString()}</span>
+                    <span title={Math.round(data.sizeStats.p25USDC).toLocaleString()}>p25={formatUSDCCompact(data.sizeStats.p25USDC)}</span>
                     <span style={{ margin: '0 6px' }}>•</span>
-                    <span title="75th percentile (USDC)">p75={Math.round(data.sizeStats.p75USDC).toLocaleString()}</span>
+                    <span title={Math.round(data.sizeStats.p75USDC).toLocaleString()}>p75={formatUSDCCompact(data.sizeStats.p75USDC)}</span>
                   </div>
                 )}
-                <BarChart data={data.sizeHistogram} xKey="bucket" yKey="count" yLabel="trades" />
+                <BarChart data={data.sizeHistogram} xKey="bucket" yKey="count" yLabel="trades" labelFormatter={formatRangeBucketLabel} />
+              </div>
               </div>
             )}
 
             {(data.singleBidSizeHistogram || data.singleBidSolverLeaderboard) && (
-              <div className="panel" style={{ marginTop: 16 }}>
+              <div className="grid" style={{ marginTop: 16 }}>
+              <div className="panel" style={{ gridColumn: 'span 12' }}>
                 <h3>Single-bid Trades</h3>
                 {data.singleBidStats && (
                   <div className="muted" style={{ marginBottom: 8 }}>
                     <span title="Number of single-bid trades">n={data.singleBidStats.count}</span>
                     <span style={{ margin: '0 6px' }}>•</span>
-                    <span title="Average notional (USDC)">avg={Math.round(data.singleBidStats.avgUSDC).toLocaleString()}</span>
+                    <span title={Math.round(data.singleBidStats.avgUSDC).toLocaleString()}>avg={formatUSDCCompact(data.singleBidStats.avgUSDC)}</span>
                     <span style={{ margin: '0 6px' }}>•</span>
-                    <span title="Median (USDC)">p50={Math.round(data.singleBidStats.p50USDC).toLocaleString()}</span>
+                    <span title={Math.round(data.singleBidStats.p50USDC).toLocaleString()}>p50={formatUSDCCompact(data.singleBidStats.p50USDC)}</span>
                     <span style={{ margin: '0 6px' }}>•</span>
-                    <span title="25th percentile (USDC)">p25={Math.round(data.singleBidStats.p25USDC).toLocaleString()}</span>
+                    <span title={Math.round(data.singleBidStats.p25USDC).toLocaleString()}>p25={formatUSDCCompact(data.singleBidStats.p25USDC)}</span>
                     <span style={{ margin: '0 6px' }}>•</span>
-                    <span title="75th percentile (USDC)">p75={Math.round(data.singleBidStats.p75USDC).toLocaleString()}</span>
+                    <span title={Math.round(data.singleBidStats.p75USDC).toLocaleString()}>p75={formatUSDCCompact(data.singleBidStats.p75USDC)}</span>
                   </div>
                 )}
                 {data.singleBidSizeHistogram && (
-                  <BarChart data={data.singleBidSizeHistogram} xKey="bucket" yKey="count" yLabel="trades" />
+                  <BarChart data={data.singleBidSizeHistogram} xKey="bucket" yKey="count" yLabel="trades" labelFormatter={formatRangeBucketLabel} />
                 )}
                 {data.singleBidSolverLeaderboard && (
                   <div style={{ marginTop: 16 }}>
@@ -289,13 +293,14 @@ function App() {
                           <tr key={s.solverAddress}>
                             <td><code title={s.solverAddress}>{solverLabel(s.solverAddress)}</code></td>
                             <td>{s.singleBidWins}</td>
-                            <td>{Math.round(s.singleBidVolumeUSDC).toLocaleString()}</td>
+                            <td title={Math.round(s.singleBidVolumeUSDC).toLocaleString()}>{formatUSDCCompact(s.singleBidVolumeUSDC)}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
                 )}
+              </div>
               </div>
             )}
 
