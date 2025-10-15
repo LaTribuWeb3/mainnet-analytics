@@ -178,6 +178,12 @@ function App() {
                         <div className="val">{apiData.count.toLocaleString()}</div>
                       </div>
                       {agg && (
+                        <div className="panel" style={{ flex: '0 0 auto' }}>
+                          <div className="muted">Total volume</div>
+                          <div className="val">${formatUSDCCompact(agg.totalNotionalUSDC)}</div>
+                        </div>
+                      )}
+                      {agg && (
                         <>
                           <div className="panel" style={{ flex: '0 0 auto' }}>
                             <div className="muted">Total trades</div>
@@ -241,7 +247,11 @@ function App() {
                               <div className="val">{aggPrycto.totalTrades.toLocaleString()}</div>
                             </div>
                             <div className="panel" style={{ flex: '0 0 auto' }}>
-                              <div className="muted">Volume</div>
+                              <div className="muted">Market volume</div>
+                              <div className="val">${formatUSDCCompact(agg.totalNotionalUSDC)}</div>
+                            </div>
+                            <div className="panel" style={{ flex: '0 0 auto' }}>
+                              <div className="muted">Prycto volume</div>
                               <div className="val">${formatUSDCCompact(aggPrycto.totalNotionalUSDC)}</div>
                             </div>
                             <div className="panel" style={{ flex: '0 0 auto' }}>
