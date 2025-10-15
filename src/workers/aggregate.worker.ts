@@ -2,7 +2,7 @@
 import { computePriceUSDCPerBase, blockHighUSDCPerBase, blockMidUSDCPerBase, normalizeAmount, TOKENS, toDay, percentDiff, higherPriceIsBetterUSDCPerBase } from '../utils/price'
 import type { AggregatesResult, TradeRecord, SolverStats } from '../types'
 
-type FilterCriteria = { fromTs?: number; toTs?: number; direction?: 'USDC_to_WBTC' | 'WBTC_to_USDC' | 'ALL'; minNotional?: number; maxNotional?: number; includeFees?: boolean }
+type FilterCriteria = { fromTs?: number; toTs?: number; direction?: 'USDC_to_WBTC' | 'WBTC_to_USDC' | 'ALL'; minNotional?: number; maxNotional?: number }
 type MsgIn = { type: 'aggregate'; filePath: string; altFileUrl?: string } | { type: 'filter'; criteria: FilterCriteria } | { type: 'hydrate'; index: TradeIdx[] }
 type MsgOut =
   | { type: 'progress'; loaded: number }
@@ -427,7 +427,7 @@ function selectBenchmark(prices: any, bench: 'high' | 'mid' | 'low'): number | n
 }
 
 function computeAggregatesFromIndex(index: TradeIdx[], criteria: FilterCriteria): AggregatesResult {
-  const { fromTs, toTs, direction, minNotional, maxNotional, includeFees } = criteria
+  const { fromTs, toTs, direction, minNotional, maxNotional } = criteria
   const filtered = index.filter(t =>
     (fromTs == null || t.ts >= fromTs) &&
     (toTs == null || t.ts <= toTs) &&
@@ -489,7 +489,7 @@ function computeAggregatesFromIndex(index: TradeIdx[], criteria: FilterCriteria)
   const dailySeries = Array.from(dayToData.entries()).sort((a,b) => a[0].localeCompare(b[0])).map(([day, d]) => ({ day, trades: d.trades, avgParticipants: d.participants / d.trades }))
 
   // profit average for filtered set
-  const totalProfit = filtered.reduce((sum, t) => sum + (includeFees ? t.profitUSDCWithFees : t.profitUSDCNoFees), 0)
+  const totalProfit = filtered.reduce((sum, t) => sum + t.profitUSDCNoFees, 0)
   const avgProfitPerTradeUSDC = filtered.length ? totalProfit / filtered.length : 0
 
   // size-segment analytics
@@ -525,7 +525,7 @@ function computeAggregatesFromIndex(index: TradeIdx[], criteria: FilterCriteria)
     b.count += 1
     b.volumeUSDC += t.notionalUSDC
     b.participantsSum += t.participants
-    const prof = includeFees ? t.profitUSDCWithFees : t.profitUSDCNoFees
+    const prof = t.profitUSDCNoFees
     b.profitSum += prof
     // profit and volume by solver (winner)
     if (t.winner) {
