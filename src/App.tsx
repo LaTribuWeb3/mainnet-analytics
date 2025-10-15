@@ -5,6 +5,21 @@ import { formatRangeBucketLabel, formatUSDCCompact } from './utils/format'
 import { PieChart } from './components/Charts'
 import { solverLabel } from './utils/solvers'
 
+type WorkerMsg =
+  | { type: 'progress'; loaded: number }
+  | { type: 'done'; data: AggregatesResult }
+  | { type: 'filtered'; data: AggregatesResult }
+  | { type: 'error'; error: string }
+
+type FilterCriteriaLike = {
+  fromTs?: number
+  toTs?: number
+  direction?: 'USDC_to_WBTC' | 'WBTC_to_USDC' | 'ALL'
+  minNotional?: number
+  maxNotional?: number
+  solverIncludes?: string
+}
+
 type PairKey = 'USDC-USDE' | 'USDC-USDT' | 'USDC-WBTC' | 'USDC-WETH'
 
 type ApiDocument = {
@@ -28,7 +43,7 @@ type ApiResponse = {
 
 function App() {
   const [selectedPair, setSelectedPair] = useState<PairKey>('USDC-USDE')
-  const [activeView, setActiveView] = useState<'analytics' | 'solver'>('analytics')
+  
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
   const [apiData, setApiData] = useState<ApiResponse | null>(null)
@@ -60,8 +75,8 @@ function App() {
         // setup worker once
         if (!workerRef.current) {
           workerRef.current = new Worker(new URL('./workers/aggregate.worker.ts', import.meta.url), { type: 'module' })
-          workerRef.current.onmessage = (ev: MessageEvent) => {
-            const msg = ev.data as any
+          workerRef.current.onmessage = (ev: MessageEvent<WorkerMsg>) => {
+            const msg = ev.data
             if (msg?.type === 'done' || msg?.type === 'filtered') setAgg(msg.data as AggregatesResult)
             if (msg?.type === 'error') setError(String(msg.error || 'Worker error'))
           }
@@ -69,8 +84,9 @@ function App() {
         // aggregate from API directly (worker will fallback from local path if needed)
         workerRef.current!.postMessage({ type: 'aggregate', filePath: '/data/data.json', altFileUrl: `https://prod.mainnet.cowswap.la-tribu.xyz/db/${selectedPair}` })
       } catch (e: unknown) {
-        if ((e as any)?.name === 'AbortError') return
-        setError((e as Error).message || 'Unknown error')
+        const err = e as { name?: string; message?: string }
+        if (err?.name === 'AbortError') return
+        setError(err?.message || 'Unknown error')
       } finally {
         setIsLoading(false)
       }
@@ -81,10 +97,9 @@ function App() {
 
   useEffect(() => {
     if (!workerRef.current || !agg) return
-    const baseCriteria: any = { fromTs, toTs, direction: 'ALL' }
-    if (activeView === 'solver') baseCriteria.solverIncludes = '0xa97851357e99082762c972f794b2a29e629511a7'
+    const baseCriteria: FilterCriteriaLike = { fromTs, toTs, direction: 'ALL' }
     workerRef.current.postMessage({ type: 'filter', criteria: baseCriteria })
-  }, [fromTs, toTs, activeView])
+  }, [fromTs, toTs, agg])
 
   // no sample preview table
 
@@ -93,14 +108,11 @@ function App() {
       <div className="container">
         <header className="header">
           <h1>Mainnet Analytics</h1>
-          <div className="tabs">
-            <button className={activeView==='analytics' ? 'active' : ''} onClick={() => setActiveView('analytics')}>Market</button>
-            {/*   <button className={activeView==='solver' ? 'active' : ''} onClick={() => setActiveView('solver')}>Solver: Prycto</button> */}
-          </div>
+          
         </header>
 
         <main className="page">
-            <section style={{ display: activeView==='analytics' ? 'block' : 'none' }}>
+            <section>
               <h2>Analytics</h2>
               <div className="panel" style={{ marginTop: 12 }}>
                 <div className="controls" style={{ marginBottom: 12 }}>
@@ -130,6 +142,16 @@ function App() {
                     <button onClick={() => { const base = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate())); const end = new Date(base.getTime() - 1); const start = new Date(base.getTime() - 7*24*60*60*1000); setFromTs(Math.floor(start.getTime()/1000)); setToTs(Math.floor(end.getTime()/1000)); }}>Last 7 days</button>
                     <button onClick={() => { const base = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate())); const end = new Date(base.getTime() - 1); const start = new Date(base.getTime() - 30*24*60*60*1000); setFromTs(Math.floor(start.getTime()/1000)); setToTs(Math.floor(end.getTime()/1000)); }}>Last 30 days</button>
                   </div>
+                  <label style={{ marginLeft: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <input type="checkbox" onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      const checked = e.target.checked
+                      if (!workerRef.current || !agg) return
+                      const baseCriteria: FilterCriteriaLike = { fromTs, toTs, direction: 'ALL' }
+                      if (checked) baseCriteria.solverIncludes = '0xa97851357e99082762c972f794b2a29e629511a7'
+                      workerRef.current.postMessage({ type: 'filter', criteria: baseCriteria })
+                    }} />
+                    Only orders with Prycto participation
+                  </label>
                   
                 </div>
 
@@ -293,38 +315,7 @@ function App() {
                 )}
               </div>
             </section>
-            <section style={{ display: activeView==='solver' ? 'block' : 'none' }}>
-              <h2>Solver Analysis: Prycto</h2>
-              <div className="panel" style={{ marginTop: 12 }}>
-                <div className="controls" style={{ marginBottom: 12 }}>
-                  <div className="muted">Orders participated by solver 0xa97851357e99082762c972f794b2a29e629511a7</div>
-                  <div className="muted">Time range filters above apply here as well.</div>
-                </div>
-                {!isLoading && !error && agg && (
-                  <>
-                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                      <div className="panel" style={{ flex: '0 0 auto' }}>
-                        <div className="muted">Total trades (filtered)</div>
-                        <div className="val">{agg.totalTrades.toLocaleString()}</div>
-                      </div>
-                      <div className="panel" style={{ flex: '0 0 auto' }}>
-                        <div className="muted">Avg profit / trade</div>
-                        <div className="val">{(() => {
-                          const avgProfit = agg.avgProfitPerTradeUSDC || 0
-                          const meanNotional = (agg.totalNotionalUSDC || 0) / Math.max(1, agg.totalTrades || 0)
-                          const bps = meanNotional > 0 ? (avgProfit / meanNotional) * 10000 : 0
-                          return `$${formatUSDCCompact(avgProfit)} (${bps.toFixed(1)} bps)`
-                        })()}</div>
-                      </div>
-                    </div>
-                    <div className="panel" style={{ marginTop: 12 }}>
-                      <h3 style={{ marginTop: 0 }}>Volume share by size</h3>
-                      <PieChart data={agg.sizeSegments || []} labelKey="bucket" valueKey="volumeUSDC" />
-                    </div>
-                  </>
-                )}
-              </div>
-            </section>
+            
         </main>
       </div>
     </div>
