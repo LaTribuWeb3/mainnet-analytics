@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import { computePriceUSDCPerBase, blockHighUSDCPerBase, blockMidUSDCPerBase, normalizeAmount, TOKENS, toDay, percentDiff, higherPriceIsBetterUSDCPerBase } from '../utils/price'
+import { computePriceUSDCPerBase, computePriceUSDCPerToken, blockHighUSDCPerBase, blockMidUSDCPerBase, normalizeAmount, TOKENS, toDay, percentDiff, higherPriceIsBetterUSDCPerBase, higherPriceIsBetterUSDCPerToken } from '../utils/price'
 import type { AggregatesResult, TradeRecord, SolverStats } from '../types'
 
 type FilterCriteria = { fromTs?: number; toTs?: number; direction?: 'USDC_to_WBTC' | 'WBTC_to_USDC' | 'ALL'; minNotional?: number; maxNotional?: number }
@@ -127,13 +127,15 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
       let topSolutions: Array<{ solver: string; priceUSDCPerBTC: number | null; rank: number }> | undefined
       if (winner) {
         const solutionPrices = tr.competitionSolutions
-          .map(s => ({ s, p: computePriceUSDCPerBase(s.order.sellToken, s.order.buyToken, s.order.sellAmount, s.order.buyAmount) }))
+          .map(s => ({ s, p: computePriceUSDCPerToken(s.order.sellToken, s.order.buyToken, s.order.sellAmount, s.order.buyAmount) }))
           .filter(x => x.p != null) as Array<{ s: typeof winner; p: number }>
 
         if (solutionPrices.length > 0) {
-          const higherIsBetter = higherPriceIsBetterUSDCPerBase(tr.sellToken, tr.buyToken) ?? true
+          const higherIsBetter = higherPriceIsBetterUSDCPerToken(tr.sellToken, tr.buyToken) ?? true
           solutionPrices.sort((a, b) => higherIsBetter ? b.p - a.p : a.p - b.p)
           winnerPrice = solutionPrices.find(x => x.s.isWinner)?.p ?? null
+          const second = solutionPrices.find(x => !x.s.isWinner)
+          secondPrice = second?.p ?? null
           // compute margin vs block high
           const benchmark = selectBenchmark(tr.eventBlockPrices as any, 'high')
           if (winnerPrice != null && benchmark != null) {
@@ -191,45 +193,28 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
         profitUSDCNoFees: 0,
       })
 
-      // profit estimation (USDC)
-      if (winnerPrice != null) {
-        const benchmark = blockHighUSDCPerBase(tr.eventBlockPrices as any)
-        if (benchmark != null) {
-          const sellTokenLc = tr.sellToken.toLowerCase()
-          const buyTokenLc = tr.buyToken.toLowerCase()
-          const isSellBase = sellTokenLc === TOKENS.WBTC || sellTokenLc === TOKENS.WETH
-          const isBuyBase = buyTokenLc === TOKENS.WBTC || buyTokenLc === TOKENS.WETH
-          let baseQty = 0
-          if (isSellBase) baseQty = normalizeAmount(tr.sellAmount, tr.sellToken)
-          else if (isBuyBase) baseQty = normalizeAmount(tr.buyAmount, tr.buyToken)
-          if (baseQty > 0) {
-            const improvement = isSellBase ? (winnerPrice - benchmark) : (benchmark - winnerPrice)
-            let gross = improvement * baseQty
-            if (gross < 0) gross = 0 // show as positive only
-
-            // Fee: WETH only, approximate using winnerPrice to value gas in USDC
-            let feeUSDC = 0
-            if (sellTokenLc === TOKENS.WETH || buyTokenLc === TOKENS.WETH) {
-              const feeETH = Number(tr.txFeeWei) / 1e18
-              // we only have winnerPrice for base, if base is WETH we can value fee
-              if (sellTokenLc === TOKENS.WETH || buyTokenLc === TOKENS.WETH) {
-                feeUSDC = feeETH * winnerPrice
-              }
-            }
-            const withFees = Math.max(0, gross - feeUSDC)
-            const noFees = gross
-            profitsWithFees.push(withFees)
-            profitsNoFees.push(noFees)
-            if (winner) {
-              profitBySolverWithFees.set(winner.solverAddress, (profitBySolverWithFees.get(winner.solverAddress) ?? 0) + withFees)
-              profitBySolverNoFees.set(winner.solverAddress, (profitBySolverNoFees.get(winner.solverAddress) ?? 0) + noFees)
-            }
-            // also store per-trade profit in index (the last pushed index row)
-            const last = index[index.length - 1]
-            if (last && last.orderUid === tr.orderUid) {
-              last.profitUSDCWithFees = withFees
-              last.profitUSDCNoFees = noFees
-            }
+      // profit estimation (USDC) vs second-best solution
+      if (winnerPrice != null && secondPrice != null) {
+        const sellTokenLc = tr.sellToken.toLowerCase()
+        const buyTokenLc = tr.buyToken.toLowerCase()
+        const higherIsBetter = higherPriceIsBetterUSDCPerToken(tr.sellToken, tr.buyToken) ?? true
+        let tokenQty = 0
+        if (sellTokenLc === TOKENS.USDC) tokenQty = normalizeAmount(tr.buyAmount, tr.buyToken)
+        else if (buyTokenLc === TOKENS.USDC) tokenQty = normalizeAmount(tr.sellAmount, tr.sellToken)
+        if (tokenQty > 0) {
+          const improvement = higherIsBetter ? (winnerPrice - secondPrice) : (secondPrice - winnerPrice)
+          const noFees = Math.max(0, improvement * tokenQty)
+          const withFees = noFees // fees ignored for now
+          profitsWithFees.push(withFees)
+          profitsNoFees.push(noFees)
+          if (winner) {
+            profitBySolverWithFees.set(winner.solverAddress, (profitBySolverWithFees.get(winner.solverAddress) ?? 0) + withFees)
+            profitBySolverNoFees.set(winner.solverAddress, (profitBySolverNoFees.get(winner.solverAddress) ?? 0) + noFees)
+          }
+          const last = index[index.length - 1]
+          if (last && last.orderUid === tr.orderUid) {
+            last.profitUSDCWithFees = withFees
+            last.profitUSDCNoFees = noFees
           }
         }
       }
@@ -287,8 +272,8 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
       ]
     )
     const participationHistogram = bucketize(participation, [1,2,3,4,5,6,8,10,12,16,20])
-    // Size buckets (USDC notional) in powers of 10 and some mid-steps
-    const sizeBuckets = [0, 1e3, 5e3, 1e4, 2.5e4, 5e4, 1e5, 2.5e5, 5e5, 1e6, 2.5e6, 5e6, 1e7, 2.5e7, 5e7, 1e8]
+    // Size buckets (USDC notional): 0-1k, 1k-10k, 10k-100k, 100k-500k, 500k-2M, 2M+
+    const sizeBuckets = [0, 1e3, 1e4, 1e5, 5e5, 2e6]
     const sizeHistogram = bucketize(tradesPreview.map(t => t.notionalUSDC), sizeBuckets)
     const sizeStats = summarize(tradesPreview.map(t => t.notionalUSDC))
     // Single-bid distributions and leaderboard
@@ -493,7 +478,7 @@ function computeAggregatesFromIndex(index: TradeIdx[], criteria: FilterCriteria)
   const avgProfitPerTradeUSDC = filtered.length ? totalProfit / filtered.length : 0
 
   // size-segment analytics
-  const sizeEdges = [0, 1e3, 5e3, 1e4, 2.5e4, 5e4, 1e5, 2.5e5, 5e5, 1e6, 2.5e6, 5e6, 1e7, 2.5e7, 5e7, 1e8]
+  const sizeEdges = [0, 1e3, 1e4, 1e5, 5e5, 2e6]
   const sizeLabels: string[] = []
   for (let i = 0; i < sizeEdges.length - 1; i++) sizeLabels.push(`${sizeEdges[i]}..${sizeEdges[i+1]}`)
   sizeLabels.push(`${sizeEdges[sizeEdges.length - 1]}+`)

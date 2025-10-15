@@ -1,11 +1,15 @@
 const USDC = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48'.toLowerCase()
 const WBTC = '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599'.toLowerCase()
 const WETH = '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2'.toLowerCase()
+const USDT = '0xdac17f958d2ee523a2206206994597c13d831ec7'.toLowerCase()
+const USDE = '0x4c9edd5852cd905f086c759e8383e09bff1e68b3'.toLowerCase()
 
 export const TOKEN_DECIMALS: Record<string, number> = {
   [USDC]: 6,
   [WBTC]: 8,
   [WETH]: 18,
+  [USDT]: 6,
+  [USDE]: 18,
 }
 
 export function normalizeAmount(raw: string, token: string): number {
@@ -38,11 +42,43 @@ export function computePriceUSDCPerBase(
   return null
 }
 
+// Generic: compute USDC per other token when one side is USDC
+export function computePriceUSDCPerToken(
+  sellToken: string,
+  buyToken: string,
+  sellAmountRaw: string,
+  buyAmountRaw: string
+): number | null {
+  const s = sellToken.toLowerCase()
+  const b = buyToken.toLowerCase()
+  if (s === USDC && b !== USDC) {
+    const usdc = normalizeAmount(sellAmountRaw, s)
+    const other = normalizeAmount(buyAmountRaw, b)
+    if (other === 0) return null
+    return usdc / other
+  }
+  if (b === USDC && s !== USDC) {
+    const other = normalizeAmount(sellAmountRaw, s)
+    const usdc = normalizeAmount(buyAmountRaw, b)
+    if (other === 0) return null
+    return usdc / other
+  }
+  return null
+}
+
 export function higherPriceIsBetterUSDCPerBase(sellToken: string, buyToken: string): boolean | null {
   const s = sellToken.toLowerCase()
   const b = buyToken.toLowerCase()
   if ((s === WBTC || s === WETH) && b === USDC) return true
   if (s === USDC && (b === WBTC || b === WETH)) return false
+  return null
+}
+
+export function higherPriceIsBetterUSDCPerToken(sellToken: string, buyToken: string): boolean | null {
+  const s = sellToken.toLowerCase()
+  const b = buyToken.toLowerCase()
+  if (s !== USDC && b === USDC) return true // selling token for USDC → higher USDC/token is better
+  if (s === USDC && b !== USDC) return false // buying token with USDC → lower USDC/token is better
   return null
 }
 

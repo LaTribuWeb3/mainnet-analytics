@@ -150,7 +150,12 @@ function App() {
                           </div>
                           <div className="panel" style={{ flex: '0 0 auto' }}>
                             <div className="muted">Avg profit / trade</div>
-                            <div className="val">${formatUSDCCompact(agg.avgProfitPerTradeUSDC || 0)}</div>
+                            <div className="val">{(() => {
+                              const avgProfit = agg.avgProfitPerTradeUSDC || 0
+                              const meanNotional = (agg.totalNotionalUSDC || 0) / Math.max(1, agg.totalTrades || 0)
+                              const bps = meanNotional > 0 ? (avgProfit / meanNotional) * 10000 : 0
+                              return `$${formatUSDCCompact(avgProfit)} (${bps.toFixed(1)} bps)`
+                            })()}</div>
                           </div>
                         </>
                       )}
@@ -177,7 +182,12 @@ function App() {
                                 <td>{seg.count.toLocaleString()}</td>
                                 <td>${formatUSDCCompact(seg.volumeUSDC)}</td>
                                 <td>{seg.avgParticipants.toFixed(2)}</td>
-                                <td>${formatUSDCCompact(seg.avgProfitPerTradeUSDC)}</td>
+                                <td>{(() => {
+                                  const avgProfit = seg.avgProfitPerTradeUSDC
+                                  const meanNotional = seg.count ? (seg.volumeUSDC / seg.count) : 0
+                                  const bps = meanNotional > 0 ? (avgProfit / meanNotional) * 10000 : 0
+                                  return `$${formatUSDCCompact(avgProfit)} (${bps.toFixed(1)} bps)`
+                                })()}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -186,11 +196,11 @@ function App() {
                       <div className="panel" style={{ marginTop: 12 }}>
                         <h3 style={{ marginTop: 0 }}>FAQ: How do we compute profit?</h3>
                         <ul style={{ margin: 0, paddingLeft: 18 }}>
-                          <li>We consider the winner's price for the order (USDC per base asset).</li>
-                          <li>We compare it to the same-block benchmark price (block high for USDC/base).</li>
-                          <li>For base sold (e.g., WBTC/WETH → USDC): profit = (winnerPrice - benchmark) × baseQuantity.</li>
-                          <li>For base bought (USDC → WBTC/WETH): profit = (benchmark - winnerPrice) × baseQuantity.</li>
-                          <li>Negative values are clamped to zero; fees are currently ignored.</li>
+                          <li>We compute USDC-per-token for each solution, using token decimals.</li>
+                          <li>Profit is winner vs second-best: Δprice × filled token quantity, clamped at 0.</li>
+                          <li>When selling token for USDC (TOKEN → USDC), higher USDC/token is better; quantity = TOKEN sold.</li>
+                          <li>When buying token with USDC (USDC → TOKEN), lower USDC/token is better; quantity = TOKEN bought.</li>
+                          <li>Fees are ignored for now. This works for BTC/ETH and stable pairs (USDT/USDE) alike.</li>
                         </ul>
                       </div>
                       </>
