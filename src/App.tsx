@@ -51,6 +51,7 @@ function App() {
   const workerRef = useRef<Worker | null>(null)
   const [fromTs, setFromTs] = useState<number | undefined>(undefined)
   const [toTs, setToTs] = useState<number | undefined>(undefined)
+  const [onlyPrycto, setOnlyPrycto] = useState<boolean>(false)
   // profits are computed without fees for now
 
   // Helpers for date handling (UTC day granularity)
@@ -97,9 +98,10 @@ function App() {
 
   useEffect(() => {
     if (!workerRef.current || !agg) return
-    const baseCriteria: FilterCriteriaLike = { fromTs, toTs, direction: 'ALL' }
-    workerRef.current.postMessage({ type: 'filter', criteria: baseCriteria })
-  }, [fromTs, toTs, agg])
+    const criteria: FilterCriteriaLike = { fromTs, toTs, direction: 'ALL' }
+    if (onlyPrycto) criteria.solverIncludes = '0xa97851357e99082762c972f794b2a29e629511a7'
+    workerRef.current.postMessage({ type: 'filter', criteria })
+  }, [fromTs, toTs, onlyPrycto, agg])
 
   // no sample preview table
 
@@ -143,13 +145,7 @@ function App() {
                     <button onClick={() => { const base = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate())); const end = new Date(base.getTime() - 1); const start = new Date(base.getTime() - 30*24*60*60*1000); setFromTs(Math.floor(start.getTime()/1000)); setToTs(Math.floor(end.getTime()/1000)); }}>Last 30 days</button>
                   </div>
                   <label style={{ marginLeft: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <input type="checkbox" onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                      const checked = e.target.checked
-                      if (!workerRef.current || !agg) return
-                      const baseCriteria: FilterCriteriaLike = { fromTs, toTs, direction: 'ALL' }
-                      if (checked) baseCriteria.solverIncludes = '0xa97851357e99082762c972f794b2a29e629511a7'
-                      workerRef.current.postMessage({ type: 'filter', criteria: baseCriteria })
-                    }} />
+                    <input type="checkbox" checked={onlyPrycto} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOnlyPrycto(e.target.checked)} />
                     Only orders with Prycto participation
                   </label>
                   
