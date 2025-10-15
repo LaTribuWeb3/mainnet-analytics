@@ -115,7 +115,9 @@ export function PieChart({ data, labelKey, valueKey, size = 220 }: { data: Array
     <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ background: '#0f172a', borderRadius: 8 }}>
         {slices.map((s, i) => (
-          <path key={i} d={s.path} fill={s.color} title={`${s.label} • ${((s.pct || 0) * 100).toFixed(1)}% • $${formatUSDCCompact(s.value)}`} />
+          <path key={i} d={s.path} fill={s.color}>
+            <title>{`${s.label} • ${((s.pct || 0) * 100).toFixed(1)}% • $${formatUSDCCompact(s.value)}`}</title>
+          </path>
         ))}
       </svg>
       <div>
