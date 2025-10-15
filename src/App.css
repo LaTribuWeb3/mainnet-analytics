@@ -35,6 +35,7 @@
 .kpi .val { font-size: 24px; font-weight: 700; }
 .table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .table th, .table td { padding: 8px 12px; border-bottom: 1px solid #1f2937; text-align: left; }
+.table td code { white-space: nowrap }
 .muted { color: var(--muted); }
 .progress {
   width: 100%; height: 8px; background: #1f2937; border-radius: 8px; overflow: hidden;
@@ -83,3 +84,11 @@
 .read-the-docs {
   color: #888;
 }
+
+/* Basic header and tabs for the simplified app */
+.header { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.header h1 { margin: 0; font-size: 24px; }
+.tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+.tabs button { background: transparent; color: var(--text); border: 1px solid #1f2937; border-radius: 9999px; padding: 8px 12px; }
+.tabs button.active { background: var(--accent); color: #0b0f1a; border-color: var(--accent); }
+.page { margin-top: 16px; text-align: left; }

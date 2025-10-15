@@ -19,6 +19,8 @@ type TradeIdx = {
   priceMarginPct: number | null
   winner: string
   solvers: string[]
+  profitUSDCWithFees: number
+  profitUSDCNoFees: number
 }
 
 const ctx: DedicatedWorkerGlobalScope = self as any
@@ -71,18 +73,50 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
     const profitBySolverWithFees = new Map<string, number>()
     const profitBySolverNoFees = new Map<string, number>()
     
-    const processRecord = (tr: TradeRecord) => {
+    const processRecord = (trIn: any) => {
+      // Normalize API record (supports both TradeRecord and API documents with competitionData)
+      const tr: TradeRecord = {
+        orderUid: trIn.orderUid || trIn.orderUID || trIn.order_id || trIn._id || 'unknown',
+        sellToken: trIn.sellToken,
+        buyToken: trIn.buyToken,
+        sellAmount: trIn.sellAmount,
+        buyAmount: trIn.buyAmount,
+        eventBlockNumber: trIn.blockNumber || trIn.eventBlockNumber || 0,
+        eventBlockTimestamp: trIn.blockTimestamp || trIn.eventBlockTimestamp || 0,
+        eventTxHash: trIn.txHash || trIn.eventTxHash || '',
+        txFeeWei: trIn.transactionFee || trIn.txFeeWei || '0',
+        competitionSolutions: Array.isArray(trIn.competitionSolutions)
+          ? trIn.competitionSolutions
+          : (Array.isArray(trIn.competitionData?.bidData)
+              ? trIn.competitionData.bidData.map((b: any, idx: number) => ({
+                  solverAddress: b.solverAddress,
+                  score: '0',
+                  ranking: idx + 1,
+                  isWinner: !!b.winner,
+                  txHash: trIn.txHash || null,
+                  referenceScore: null,
+                  order: {
+                    id: trIn.orderUid || trIn._id || 'unknown',
+                    sellAmount: b.sellAmount ?? trIn.sellAmount,
+                    buyAmount: b.buyAmount ?? trIn.buyAmount,
+                    sellToken: trIn.sellToken,
+                    buyToken: trIn.buyToken,
+                  },
+                }))
+              : []) as any,
+        eventBlockPrices: (trIn.eventBlockPrices || trIn.blockPrices || {}) as any,
+      }
       totalTrades += 1
       const winner = tr.competitionSolutions.find(s => s.isWinner)
-      const participants = tr.competitionSolutions.length
+      const participants = tr.competitionSolutions?.length || 0
       totalParticipants += participants
       participation.push(participants)
       if (participants === 1) singleBid += 1
 
       // computePriceUSDCPerBase available via per-solution pricing below
       // Notional USDC using USDC side of the trade
-      const sellLc = tr.sellToken.toLowerCase()
-      const buyLc = tr.buyToken.toLowerCase()
+      const sellLc = (tr.sellToken || '').toLowerCase()
+      const buyLc = (tr.buyToken || '').toLowerCase()
       let notionalUSDCForTrade = 0
       if (sellLc === TOKENS.USDC) notionalUSDCForTrade = normalizeAmount(tr.sellAmount, tr.sellToken)
       else if (buyLc === TOKENS.USDC) notionalUSDCForTrade = normalizeAmount(tr.buyAmount, tr.buyToken)
@@ -118,7 +152,7 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
         }
       }
 
-      const day = toDay(tr.eventBlockTimestamp)
+      const day = toDay(tr.eventBlockTimestamp || 0)
       const d = dayToData.get(day) ?? { trades: 0, participants: 0 }
       d.trades += 1
       d.participants += participants
@@ -153,6 +187,8 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
         })(),
         winner: winner?.solverAddress ?? 'unknown',
         solvers: Array.from(new Set(tr.competitionSolutions.map(s => s.solverAddress))),
+        profitUSDCWithFees: 0,
+        profitUSDCNoFees: 0,
       })
 
       // profit estimation (USDC)
@@ -187,6 +223,12 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
             if (winner) {
               profitBySolverWithFees.set(winner.solverAddress, (profitBySolverWithFees.get(winner.solverAddress) ?? 0) + withFees)
               profitBySolverNoFees.set(winner.solverAddress, (profitBySolverNoFees.get(winner.solverAddress) ?? 0) + noFees)
+            }
+            // also store per-trade profit in index (the last pushed index row)
+            const last = index[index.length - 1]
+            if (last && last.orderUid === tr.orderUid) {
+              last.profitUSDCWithFees = withFees
+              last.profitUSDCNoFees = noFees
             }
           }
         }
@@ -226,7 +268,11 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
     if (!(cleaned.startsWith('[') || cleaned.startsWith('{'))) {
       throw new Error(`Dataset is not JSON. First chars: ${cleaned.slice(0, 64)}`)
     }
-    const arr = JSON.parse(cleaned) as TradeRecord[]
+    const parsed = JSON.parse(cleaned)
+    const arr: TradeRecord[] = Array.isArray(parsed)
+      ? parsed
+      : (Array.isArray(parsed?.documents) ? parsed.documents : [])
+    if (!Array.isArray(arr)) throw new Error('Unexpected dataset shape: not an array and no documents[] found')
     for (const tr of arr) processRecord(tr)
 
     const marginPct = margins.map(x => x * 100)
@@ -381,7 +427,7 @@ function selectBenchmark(prices: any, bench: 'high' | 'mid' | 'low'): number | n
 }
 
 function computeAggregatesFromIndex(index: TradeIdx[], criteria: FilterCriteria): AggregatesResult {
-  const { fromTs, toTs, direction, minNotional, maxNotional } = criteria
+  const { fromTs, toTs, direction, minNotional, maxNotional, includeFees } = criteria
   const filtered = index.filter(t =>
     (fromTs == null || t.ts >= fromTs) &&
     (toTs == null || t.ts <= toTs) &&
@@ -442,6 +488,76 @@ function computeAggregatesFromIndex(index: TradeIdx[], criteria: FilterCriteria)
   const participationHistogram = bucketize(participation, [1,2,3,4,5,6,8,10,12,16,20])
   const dailySeries = Array.from(dayToData.entries()).sort((a,b) => a[0].localeCompare(b[0])).map(([day, d]) => ({ day, trades: d.trades, avgParticipants: d.participants / d.trades }))
 
+  // profit average for filtered set
+  const totalProfit = filtered.reduce((sum, t) => sum + (includeFees ? t.profitUSDCWithFees : t.profitUSDCNoFees), 0)
+  const avgProfitPerTradeUSDC = filtered.length ? totalProfit / filtered.length : 0
+
+  // size-segment analytics
+  const sizeEdges = [0, 1e3, 5e3, 1e4, 2.5e4, 5e4, 1e5, 2.5e5, 5e5, 1e6, 2.5e6, 5e6, 1e7, 2.5e7, 5e7, 1e8]
+  const sizeLabels: string[] = []
+  for (let i = 0; i < sizeEdges.length - 1; i++) sizeLabels.push(`${sizeEdges[i]}..${sizeEdges[i+1]}`)
+  sizeLabels.push(`${sizeEdges[sizeEdges.length - 1]}+`)
+  type BucketAgg = {
+    count: number
+    volumeUSDC: number
+    participantsSum: number
+    profitSum: number
+    profitBySolver: Map<string, number>
+    winBySolver: Map<string, { wins: number; participated: number }>
+    volumeBySolver: Map<string, number>
+  }
+  const buckets: BucketAgg[] = sizeLabels.map(() => ({
+    count: 0,
+    volumeUSDC: 0,
+    participantsSum: 0,
+    profitSum: 0,
+    profitBySolver: new Map(),
+    winBySolver: new Map(),
+    volumeBySolver: new Map(),
+  }))
+  const bucketIndex = (v: number) => {
+    for (let i = 0; i < sizeEdges.length - 1; i++) if (v >= sizeEdges[i] && v < sizeEdges[i+1]) return i
+    return sizeLabels.length - 1
+  }
+  for (const t of filtered) {
+    const bi = bucketIndex(t.notionalUSDC)
+    const b = buckets[bi]
+    b.count += 1
+    b.volumeUSDC += t.notionalUSDC
+    b.participantsSum += t.participants
+    const prof = includeFees ? t.profitUSDCWithFees : t.profitUSDCNoFees
+    b.profitSum += prof
+    // profit and volume by solver (winner)
+    if (t.winner) {
+      b.profitBySolver.set(t.winner, (b.profitBySolver.get(t.winner) ?? 0) + prof)
+      b.volumeBySolver.set(t.winner, (b.volumeBySolver.get(t.winner) ?? 0) + t.notionalUSDC)
+    }
+    // win rate by solver, count participation
+    const uniq = new Set(t.solvers)
+    for (const s of uniq) {
+      const rec = b.winBySolver.get(s) ?? { wins: 0, participated: 0 }
+      rec.participated += 1
+      if (t.winner === s) rec.wins += 1
+      b.winBySolver.set(s, rec)
+    }
+  }
+  const sizeSegments = sizeLabels.map((bucket, i) => {
+    const b = buckets[i]
+    const topByProfit = Array.from(b.profitBySolver.entries()).sort((a,b) => b[1] - a[1]).slice(0, 5).map(([solverAddress, totalProfitUSDC]) => ({ solverAddress, totalProfitUSDC }))
+    const topByWinRate = Array.from(b.winBySolver.entries()).map(([solverAddress, r]) => ({ solverAddress, winRate: r.participated ? r.wins / r.participated : 0, tradesParticipated: r.participated, wins: r.wins })).sort((a,b) => b.winRate - a.winRate).slice(0, 5)
+    const topByVolume = Array.from(b.volumeBySolver.entries()).sort((a,b) => b[1] - a[1]).slice(0,5).map(([solverAddress, volumeUSDC]) => ({ solverAddress, volumeUSDC, wins: (b.winBySolver.get(solverAddress)?.wins ?? 0) }))
+    return {
+      bucket,
+      count: b.count,
+      volumeUSDC: b.volumeUSDC,
+      avgParticipants: b.count ? b.participantsSum / b.count : 0,
+      avgProfitPerTradeUSDC: b.count ? b.profitSum / b.count : 0,
+      topByProfit,
+      topByWinRate,
+      topByVolume,
+    }
+  })
+
   return {
     totalTrades,
     totalNotionalUSDC,
@@ -449,9 +565,12 @@ function computeAggregatesFromIndex(index: TradeIdx[], criteria: FilterCriteria)
     singleBidShare: totalTrades ? singleBid / totalTrades : 0,
     marginHistogram,
     participationHistogram,
+    sizeHistogram: bucketize(filtered.map(t => t.notionalUSDC), sizeEdges),
     dailySeries,
     solverStats: Array.from(solverToStats.values()).sort((a,b) => b.wins - a.wins),
     rivalryMatrix: { solvers: topSolvers, matrix },
+    avgProfitPerTradeUSDC,
+    sizeSegments,
     tradesPreview: filtered.slice(0, 200).map(t => ({
       orderUid: t.orderUid,
       timestamp: t.ts,

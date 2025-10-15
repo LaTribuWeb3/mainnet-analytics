@@ -1,369 +1,201 @@
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import type { AggregatesResult } from './types'
-import { BarChart } from './components/Charts'
-import { solverLabel } from './utils/solvers'
-import { formatUSDCCompact, formatRangeBucketLabel } from './utils/format'
+import { formatRangeBucketLabel, formatUSDCCompact } from './utils/format'
+
+type PairKey = 'USDC-USDE' | 'USDC-USDT' | 'USDC-WBTC' | 'USDC-WETH'
+
+type ApiDocument = {
+  _id?: string
+  txHash?: string
+  orderUid?: string
+  blockNumber?: number
+  blockTimestamp?: number
+  buyAmount?: string
+  buyToken?: string
+  sellAmount?: string
+  sellToken?: string
+  owner?: string
+}
+
+type ApiResponse = {
+  collection: PairKey
+  count: number
+  documents: ApiDocument[]
+}
 
 function App() {
-  const [data, setData] = useState<AggregatesResult | null>(null)
-  const baseDataRef = useRef<AggregatesResult | null>(null)
+  const [selectedPair, setSelectedPair] = useState<PairKey>('USDC-USDE')
+  const [isLoading, setIsLoading] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
-  const [progress, setProgress] = useState<number>(0)
+  const [apiData, setApiData] = useState<ApiResponse | null>(null)
+  const [agg, setAgg] = useState<AggregatesResult | null>(null)
   const workerRef = useRef<Worker | null>(null)
-  // index cache no longer used; worker holds index in memory
-
-  // filters
-  const [from, setFrom] = useState<string>('')
-  const [to, setTo] = useState<string>('')
-  const [direction, setDirection] = useState<'ALL' | 'USDC_to_WBTC' | 'WBTC_to_USDC'>('ALL')
-  const [minNotional, setMinNotional] = useState<string>('')
-  const [maxNotional, setMaxNotional] = useState<string>('')
+  const [fromTs, setFromTs] = useState<number | undefined>(undefined)
+  const [toTs, setToTs] = useState<number | undefined>(undefined)
   const [includeFees, setIncludeFees] = useState<boolean>(true)
 
+  // Helpers for date handling (UTC day granularity)
+  const tsToDay = (ts?: number) => ts ? new Date(ts * 1000).toISOString().slice(0, 10) : ''
+  const parseDay = (day: string) => {
+    const [y,m,d] = day.split('-').map(Number)
+    return new Date(Date.UTC(y, (m||1)-1, d||1))
+  }
+  const dayStrToStartTs = (day: string) => Math.floor(parseDay(day).getTime() / 1000)
+  const dayStrToEndTs = (day: string) => Math.floor((parseDay(day).getTime() + (24*60*60 - 1) * 1000) / 1000)
+
   useEffect(() => {
-    // Kick off aggregation on mount
-    const w = new Worker(new URL('./workers/aggregate.worker.ts', import.meta.url), { type: 'module' })
-    workerRef.current = w
-    w.onmessage = (ev: MessageEvent<{ type: 'progress' | 'done' | 'error' | 'filtered'; loaded?: number; data?: AggregatesResult; error?: string }>) => {
-      if (ev.data.type === 'progress') {
-        setProgress(ev.data.loaded ?? 0)
-      } else if (ev.data.type === 'done') {
-        if (ev.data.data) {
-          setData(ev.data.data)
-          baseDataRef.current = ev.data.data
+    const controller = new AbortController()
+    const fetchData = async () => {
+      setIsLoading(true)
+      setError(null)
+      try {
+        const response = await fetch(`https://prod.mainnet.cowswap.la-tribu.xyz/db/${selectedPair}`, { signal: controller.signal })
+        if (!response.ok) throw new Error(`Failed to fetch ${selectedPair} (${response.status})`)
+        const json = (await response.json()) as ApiResponse
+        setApiData(json)
+        // setup worker once
+        if (!workerRef.current) {
+          workerRef.current = new Worker(new URL('./workers/aggregate.worker.ts', import.meta.url), { type: 'module' })
+          workerRef.current.onmessage = (ev: MessageEvent) => {
+            const msg = ev.data as any
+            if (msg?.type === 'done' || msg?.type === 'filtered') setAgg(msg.data as AggregatesResult)
+            if (msg?.type === 'error') setError(String(msg.error || 'Worker error'))
+          }
         }
-      } else if (ev.data.type === 'error') {
-        setError(ev.data.error ?? 'Unknown error')
-      } else if (ev.data.type === 'filtered') {
-        if (ev.data.data) setData(ev.data.data)
+        // aggregate from API directly (worker will fallback from local path if needed)
+        workerRef.current!.postMessage({ type: 'aggregate', filePath: '/data/data.json', altFileUrl: `https://prod.mainnet.cowswap.la-tribu.xyz/db/${selectedPair}` })
+      } catch (e: unknown) {
+        if ((e as any)?.name === 'AbortError') return
+        setError((e as Error).message || 'Unknown error')
+      } finally {
+        setIsLoading(false)
       }
     }
-    // Use relative path first; provide optional external URL as fallback via ?dataUrl= query
-    const params = new URLSearchParams(location.search)
-    // Try API first by default; allow alternate via ?pair= param
-    const pair = (() => {
-      const p = (params.get('pair') || 'wbtc').toLowerCase()
-      if (p !== 'wbtc' && p !== 'weth') params.set('pair', 'wbtc')
-      return (p === 'weth' ? 'weth' : 'wbtc') as 'wbtc' | 'weth'
-    })()
-    const localPath = pair === 'weth' ? '/data/usdc-weth-trades.enriched-prices7.json' : '/data/usdc-wbtc-trades.enriched-prices9.json'
-    const apiFile = pair === 'weth' ? 'usdc-weth-trades.enriched-prices.json' : 'usdc-wbtc-trades.enriched-prices.json'
-    const apiUrlDefault = `https://prod.mainnet.cowswap.la-tribu.xyz/api/data/${apiFile}`
-    const primaryUrl = params.get('dataUrl') || apiUrlDefault
-    // Primary: API (or dataUrl override), Fallback: local file
-    w.postMessage({ type: 'aggregate', filePath: primaryUrl, altFileUrl: localPath })
-    return () => { w.terminate() }
-  }, [])
+    fetchData()
+    return () => controller.abort()
+  }, [selectedPair])
 
   useEffect(() => {
-    // no-op: index is held in worker after initial aggregation
-  }, [])
+    if (!workerRef.current || !agg) return
+    workerRef.current.postMessage({ type: 'filter', criteria: { fromTs, toTs, direction: 'ALL', includeFees } })
+  }, [fromTs, toTs, includeFees])
 
-  const applyFilters = () => {
-    const fromTs = from ? Math.floor(new Date(from).getTime() / 1000) : undefined
-    const toTs = to ? Math.floor(new Date(to).getTime() / 1000) : undefined
-    const minN = minNotional ? Number(minNotional) : undefined
-    const maxN = maxNotional ? Number(maxNotional) : undefined
-    const noFilters = !fromTs && !toTs && minN == null && maxN == null && direction === 'ALL'
-    if (noFilters && baseDataRef.current) {
-      setData(baseDataRef.current)
-      return
-    }
-    workerRef.current?.postMessage({ type: 'filter', criteria: { fromTs, toTs, direction, minNotional: minN, maxNotional: maxN, includeFees } })
-  }
-
-  // const totalMB = 0 // unknown without content-length; keep 0
-  const hasData = !!data
+  // no sample preview table
 
   return (
     <div className="app">
       <div className="container">
-        <h1>Mainnet Analytics</h1>
-        {!hasData && !error && (
-          <div className="panel" style={{ marginTop: 16 }}>
-            <div className="muted">Parsing data… This may take a moment.</div>
-            <div className="progress" style={{ marginTop: 8 }}><div style={{ width: progress ? '20%' : '5%' }} /></div>
-            <div className="muted" style={{ marginTop: 8 }}>
-              Serving dataset from public API by default (<code>https://prod.mainnet.cowswap.la-tribu.xyz/api/data/...</code>) based on <code>?pair=wbtc|weth</code> (default wbtc). If API fails, it falls back to local files <code>data/usdc-wbtc-trades.enriched-prices9.json</code> or <code>data/usdc-weth-trades.enriched-prices7.json</code>. You can override the API with <code>?dataUrl=https://example.com/file.json</code>.
-            </div>
-          </div>
-        )}
-        {error && (
-          <div className="panel" style={{ marginTop: 16 }}>
-            <div>Failed to load dataset.</div>
-            <div className="muted">{error}</div>
-            <div className="muted" style={{ marginTop: 8 }}>
-              Ensure the file exists at <code>public/data/usdc-wbtc-trades.enriched-prices9.json</code> or configure a path.
-            </div>
-          </div>
-        )}
+        <header className="header">
+          <h1>Mainnet Analytics</h1>
+        </header>
 
-        {hasData && data && (
-          <>
-            <div className="panel" style={{ marginTop: 16 }}>
-              <h3>Filters</h3>
-              <div className="controls">
-                <label>From <input type="datetime-local" value={from} onChange={e => setFrom(e.target.value)} /></label>
-                <label>To <input type="datetime-local" value={to} onChange={e => setTo(e.target.value)} /></label>
-                <label>Direction
-                  <select value={direction} onChange={e => setDirection(e.target.value as 'ALL' | 'USDC_to_WBTC' | 'WBTC_to_USDC')}>
-                    <option value="ALL">ALL</option>
-                    <option value="USDC_to_WBTC">USDC_to_WBTC</option>
-                    <option value="WBTC_to_USDC">WBTC_to_USDC</option>
-                  </select>
-                </label>
-                <label>Min Notional (USDC) <input type="number" placeholder="e.g. 100000" value={minNotional} onChange={e => setMinNotional(e.target.value)} /></label>
-                <label>Max Notional (USDC) <input type="number" placeholder="e.g. 10000000" value={maxNotional} onChange={e => setMaxNotional(e.target.value)} /></label>
-                <label>Dataset
-                  <select defaultValue={(new URLSearchParams(location.search).get('pair') || 'wbtc').toLowerCase()} onChange={e => {
-                    const pair = e.target.value
-                    const params = new URLSearchParams(location.search)
-                    params.set('pair', pair)
-                    const apiFile = pair === 'weth' ? 'usdc-weth-trades.enriched-prices.json' : 'usdc-wbtc-trades.enriched-prices.json'
-                    const primaryUrl = params.get('dataUrl') || `https://prod.mainnet.cowswap.la-tribu.xyz/api/data/${apiFile}`
-                    const localPath = pair === 'weth' ? '/data/usdc-weth-trades.enriched-prices7.json' : '/data/usdc-wbtc-trades.enriched-prices9.json'
-                    workerRef.current?.postMessage({ type: 'aggregate', filePath: primaryUrl, altFileUrl: localPath })
-                    history.replaceState(null, '', `${location.pathname}?${params.toString()}`)
-                  }}>
-                    <option value="wbtc">USDC-WBTC</option>
-                    <option value="weth">USDC-WETH</option>
-                  </select>
-                </label>
-                <label>Include fees (WETH only)
-                  <input type="checkbox" checked={includeFees} onChange={e => setIncludeFees(e.target.checked)} />
-                </label>
-                <button onClick={applyFilters}>Apply</button>
-              </div>
-            </div>
-            <div className="grid" style={{ marginTop: 16 }}>
-              <div className="panel kpi">
-                <h3>Total Trades</h3>
-                <div className="val">{data.totalTrades.toLocaleString()}</div>
-              </div>
-              <div className="panel kpi">
-                <h3>Total Notional (USDC)</h3>
-                <div className="val" title={Math.round(data.totalNotionalUSDC).toLocaleString()}>{formatUSDCCompact(data.totalNotionalUSDC)}</div>
-              </div>
-              <div className="panel kpi">
-                <h3>Avg Participants</h3>
-                <div className="val">{data.avgParticipants.toFixed(2)}</div>
-              </div>
-              <div className="panel kpi">
-                <h3>Single-bid Share</h3>
-                <div className="val">{(data.singleBidShare * 100).toFixed(1)}%</div>
-              </div>
-            </div>
-
-            <div className="panel" style={{ marginTop: 16 }}>
-              <h3>Top Solvers</h3>
-              <table className="table">
-                <thead>
-                    <tr>
-                    <th>Solver</th>
-                    <th>Wins</th>
-                    <th>Participations</th>
-                    <th>Volume (USDC)</th>
-                    <th>Win Rate</th>
-                      <th>Total Profit (USDC)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.solverStats.slice(0, 20).map(s => (
-                    <tr key={s.solverAddress}>
-                      <td><code title={s.solverAddress}>{solverLabel(s.solverAddress)}</code></td>
-                      <td>{s.wins}</td>
-                      <td>{s.tradesParticipated}</td>
-                      <td title={Math.round(s.volumeUSDC).toLocaleString()}>{formatUSDCCompact(s.volumeUSDC)}</td>
-                      <td>{(s.wins / Math.max(1, s.tradesParticipated) * 100).toFixed(1)}%</td>
-                        <td>{s.profitUSDCWithFees != null || s.profitUSDCNoFees != null ? formatUSDCCompact((includeFees ? (s.profitUSDCWithFees ?? 0) : (s.profitUSDCNoFees ?? 0))) : '-'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {(() => {
-                const sumVolumes = data.solverStats.reduce((a, s) => a + (s.volumeUSDC || 0), 0)
-                const total = data.totalNotionalUSDC || 0
-                const diff = total ? ((sumVolumes - total) / total) * 100 : 0
-                return (
-                  <div className="muted" style={{ marginTop: 8 }}>
-                    Validation: sum(solver volumes) = <span title={Math.round(sumVolumes).toLocaleString()}>{formatUSDCCompact(sumVolumes)}</span> USDC • total notional = <span title={Math.round(total).toLocaleString()}>{formatUSDCCompact(total)}</span> USDC • delta = {diff.toFixed(2)}%
+        <main className="page">
+            <section>
+              <h2>Analytics</h2>
+              <div className="panel" style={{ marginTop: 12 }}>
+                <div className="controls" style={{ marginBottom: 12 }}>
+                  <label>
+                    Pair
+                    <select
+                      value={selectedPair}
+                      onChange={e => setSelectedPair(e.target.value as PairKey)}
+                      aria-label="Select collection/pair"
+                    >
+                      <option value="USDC-USDE">USDC-USDE</option>
+                      <option value="USDC-USDT">USDC-USDT</option>
+                      <option value="USDC-WBTC">USDC-WBTC</option>
+                      <option value="USDC-WETH">USDC-WETH</option>
+                    </select>
+                  </label>
+                  <label style={{ marginLeft: 12 }}>
+                    Start day (UTC)
+                    <input type="date" value={fromTs ? tsToDay(fromTs) : (agg?.dailySeries?.[0]?.day || '')} onChange={e => setFromTs(e.target.value ? dayStrToStartTs(e.target.value) : undefined)} />
+                  </label>
+                  <label style={{ marginLeft: 12 }}>
+                    End day (UTC)
+                    <input type="date" value={toTs ? tsToDay(toTs) : (agg?.dailySeries?.[agg.dailySeries.length-1]?.day || '')} onChange={e => setToTs(e.target.value ? dayStrToEndTs(e.target.value) : undefined)} />
+                  </label>
+                  <div style={{ display: 'inline-flex', gap: 8, marginLeft: 12 }}>
+                    <button onClick={() => { const now = new Date(); const y = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()-1)); const day = y.toISOString().slice(0,10); setFromTs(dayStrToStartTs(day)); setToTs(dayStrToEndTs(day)); }}>Yesterday</button>
+                    <button onClick={() => { const base = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate())); const end = new Date(base.getTime() - 1); const start = new Date(base.getTime() - 7*24*60*60*1000); setFromTs(Math.floor(start.getTime()/1000)); setToTs(Math.floor(end.getTime()/1000)); }}>Last 7 days</button>
+                    <button onClick={() => { const base = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate())); const end = new Date(base.getTime() - 1); const start = new Date(base.getTime() - 30*24*60*60*1000); setFromTs(Math.floor(start.getTime()/1000)); setToTs(Math.floor(end.getTime()/1000)); }}>Last 30 days</button>
                   </div>
-                )
-              })()}
-            </div>
-
-            <div className="grid" style={{ marginTop: 16 }}>
-              <div className="panel" style={{ gridColumn: 'span 12' }}>
-                <h3>Participation Distribution</h3>
-                {data.participationStats && (
-                  <div className="muted" style={{ marginBottom: 8 }}>
-                    <span title="Number of trades included after filters">n={data.participationStats.count}</span>
-                    <span style={{ margin: '0 6px' }}>•</span>
-                    <span title="Arithmetic mean participants per trade">avg={data.participationStats.avg.toFixed(2)}</span>
-                    <span style={{ margin: '0 6px' }}>•</span>
-                    <span title="Median (50th percentile) participants">p50={data.participationStats.p50.toFixed(0)}</span>
-                    <span style={{ margin: '0 6px' }}>•</span>
-                    <span title="25th percentile participants">p25={data.participationStats.p25.toFixed(0)}</span>
-                    <span style={{ margin: '0 6px' }}>•</span>
-                    <span title="75th percentile participants">p75={data.participationStats.p75.toFixed(0)}</span>
-                  </div>
-                )}
-                <BarChart data={data.participationHistogram} xKey="bucket" yKey="count" yLabel="trades" />
-              </div>
-              <div className="panel" style={{ gridColumn: 'span 12', marginTop: 16 }}>
-                <h3>Winner Margin Distribution (%)</h3>
-                {data.marginStats && (
-                  <div className="muted" style={{ marginBottom: 8 }}>
-                    <span title="Number of trades with computable winner vs block margin">n={data.marginStats.count}</span>
-                    <span style={{ margin: '0 6px' }}>•</span>
-                    <span title="Average percent difference: (winner USDC/BTC − block USDC/BTC) / block">avg={data.marginStats.avgPct.toFixed(2)}%</span>
-                    <span style={{ margin: '0 6px' }}>•</span>
-                    <span title="Median percent difference (50th percentile)">p50={data.marginStats.p50Pct.toFixed(2)}%</span>
-                    <span style={{ margin: '0 6px' }}>•</span>
-                    <span title="25th percentile percent difference">p25={data.marginStats.p25Pct.toFixed(2)}%</span>
-                    <span style={{ margin: '0 6px' }}>•</span>
-                    <span title="75th percentile percent difference">p75={data.marginStats.p75Pct.toFixed(2)}%</span>
-                  </div>
-                )}
-                <BarChart
-                  data={data.marginHistogram}
-                  xKey="bucket"
-                  yKey="count"
-                  yLabel="trades"
-                  labelFormatter={(s) => s.replace(/-/g, '−')}
-                />
-              </div>
-            </div>
-
-            {data.sizeHistogram && (
-              <div className="grid" style={{ marginTop: 16 }}>
-              <div className="panel" style={{ gridColumn: 'span 12' }}>
-                <h3>Trade Size Distribution (USDC notional)</h3>
-                {data.sizeStats && (
-                  <div className="muted" style={{ marginBottom: 8 }}>
-                    <span title="Number of trades included">n={data.sizeStats.count}</span>
-                    <span style={{ margin: '0 6px' }}>•</span>
-                    <span title={Math.round(data.sizeStats.avgUSDC).toLocaleString()}>avg={formatUSDCCompact(data.sizeStats.avgUSDC)}</span>
-                    <span style={{ margin: '0 6px' }}>•</span>
-                    <span title={Math.round(data.sizeStats.p50USDC).toLocaleString()}>p50={formatUSDCCompact(data.sizeStats.p50USDC)}</span>
-                    <span style={{ margin: '0 6px' }}>•</span>
-                    <span title={Math.round(data.sizeStats.p25USDC).toLocaleString()}>p25={formatUSDCCompact(data.sizeStats.p25USDC)}</span>
-                    <span style={{ margin: '0 6px' }}>•</span>
-                    <span title={Math.round(data.sizeStats.p75USDC).toLocaleString()}>p75={formatUSDCCompact(data.sizeStats.p75USDC)}</span>
-                  </div>
-                )}
-                <BarChart data={data.sizeHistogram} xKey="bucket" yKey="count" yLabel="trades" labelFormatter={formatRangeBucketLabel} />
-              </div>
-              </div>
-            )}
-
-            {(data.singleBidSizeHistogram || data.singleBidSolverLeaderboard) && (
-              <div className="grid" style={{ marginTop: 16 }}>
-              <div className="panel" style={{ gridColumn: 'span 12' }}>
-                <h3>Single-bid Trades</h3>
-                {data.singleBidStats && (
-                  <div className="muted" style={{ marginBottom: 8 }}>
-                    <span title="Number of single-bid trades">n={data.singleBidStats.count}</span>
-                    <span style={{ margin: '0 6px' }}>•</span>
-                    <span title={Math.round(data.singleBidStats.avgUSDC).toLocaleString()}>avg={formatUSDCCompact(data.singleBidStats.avgUSDC)}</span>
-                    <span style={{ margin: '0 6px' }}>•</span>
-                    <span title={Math.round(data.singleBidStats.p50USDC).toLocaleString()}>p50={formatUSDCCompact(data.singleBidStats.p50USDC)}</span>
-                    <span style={{ margin: '0 6px' }}>•</span>
-                    <span title={Math.round(data.singleBidStats.p25USDC).toLocaleString()}>p25={formatUSDCCompact(data.singleBidStats.p25USDC)}</span>
-                    <span style={{ margin: '0 6px' }}>•</span>
-                    <span title={Math.round(data.singleBidStats.p75USDC).toLocaleString()}>p75={formatUSDCCompact(data.singleBidStats.p75USDC)}</span>
-                  </div>
-                )}
-                {data.singleBidSizeHistogram && (
-                  <BarChart data={data.singleBidSizeHistogram} xKey="bucket" yKey="count" yLabel="trades" labelFormatter={formatRangeBucketLabel} />
-                )}
-                {data.singleBidSolverLeaderboard && (
-                  <div style={{ marginTop: 16 }}>
-                    <table className="table">
-                      <thead>
-                        <tr>
-                          <th>Solver</th>
-                          <th>Single-bid wins</th>
-                          <th>Single-bid volume (USDC)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {data.singleBidSolverLeaderboard.map(s => (
-                          <tr key={s.solverAddress}>
-                            <td><code title={s.solverAddress}>{solverLabel(s.solverAddress)}</code></td>
-                            <td>{s.singleBidWins}</td>
-                            <td title={Math.round(s.singleBidVolumeUSDC).toLocaleString()}>{formatUSDCCompact(s.singleBidVolumeUSDC)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-              </div>
-            )}
-
-            {(data.profitStatsWithFees || data.profitStatsNoFees) && (
-              <div className="panel" style={{ marginTop: 16 }}>
-                <h3>Estimated Profit (USDC)</h3>
-                <div className="muted">
-                  <span title="Number of trades included in profit estimation">n={(includeFees ? data.profitStatsWithFees?.count : data.profitStatsNoFees?.count) ?? 0}</span>
-                  <span style={{ margin: '0 6px' }}>•</span>
-                  <span title="Sum of estimated profits (USDC)">total={Math.round((includeFees ? data.profitStatsWithFees?.totalUSDC : data.profitStatsNoFees?.totalUSDC) ?? 0).toLocaleString()}</span>
-                  <span style={{ margin: '0 6px' }}>•</span>
-                  <span title="Average estimated profit (USDC)">avg={((includeFees ? data.profitStatsWithFees?.avgUSDC : data.profitStatsNoFees?.avgUSDC) ?? 0).toFixed(2)}</span>
-                  <span style={{ margin: '0 6px' }}>•</span>
-                  <span title="Median estimated profit (USDC)">p50={((includeFees ? data.profitStatsWithFees?.p50USDC : data.profitStatsNoFees?.p50USDC) ?? 0).toFixed(2)}</span>
-                  <span style={{ margin: '0 6px' }}>•</span>
-                  <span title="25th percentile (USDC)">p25={((includeFees ? data.profitStatsWithFees?.p25USDC : data.profitStatsNoFees?.p25USDC) ?? 0).toFixed(2)}</span>
-                  <span style={{ margin: '0 6px' }}>•</span>
-                  <span title="75th percentile (USDC)">p75={((includeFees ? data.profitStatsWithFees?.p75USDC : data.profitStatsNoFees?.p75USDC) ?? 0).toFixed(2)}</span>
+                  <label style={{ marginLeft: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <input type="checkbox" checked={includeFees} onChange={e => setIncludeFees(e.target.checked)} />
+                    Include fees in profit
+                  </label>
                 </div>
-                <div className="muted" style={{ marginTop: 8 }}>
-                  For WBTC, fees are ignored. For WETH, gas fees are converted to USDC using the winner price and deducted when “Include fees” is checked.
-                </div>
+
+                {isLoading && <div className="muted">Loading {selectedPair}…</div>}
+                {error && (
+                  <div className="panel" style={{ marginTop: 12 }}>
+                    <div>Failed to load data for {selectedPair}</div>
+                    <div className="muted">{error}</div>
+                  </div>
+                )}
+                {!isLoading && !error && apiData && (
+                  <>
+                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                      <div className="panel" style={{ flex: '0 0 auto' }}>
+                        <div className="muted">Collection</div>
+                        <div className="val">{apiData.collection}</div>
+                      </div>
+                      <div className="panel" style={{ flex: '0 0 auto' }}>
+                        <div className="muted">Count</div>
+                        <div className="val">{apiData.count.toLocaleString()}</div>
+                      </div>
+                      {agg && (
+                        <>
+                          <div className="panel" style={{ flex: '0 0 auto' }}>
+                            <div className="muted">Total trades</div>
+                            <div className="val">{agg.totalTrades.toLocaleString()}</div>
+                          </div>
+                          <div className="panel" style={{ flex: '0 0 auto' }}>
+                            <div className="muted">Avg profit / trade</div>
+                            <div className="val">${formatUSDCCompact(agg.avgProfitPerTradeUSDC || 0)}</div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {agg && (
+                      <div className="panel" style={{ marginTop: 12 }}>
+                        <h3 style={{ marginTop: 0 }}>Volume repartition by order size</h3>
+                        <table className="table">
+                          <thead>
+                            <tr>
+                              <th>Size bucket</th>
+                              <th>Trades</th>
+                              <th>Volume</th>
+                              <th>Avg participants</th>
+                              <th>Avg profit/trade</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {agg.sizeSegments?.map(seg => (
+                              <tr key={seg.bucket}>
+                                <td>{formatRangeBucketLabel(seg.bucket)}</td>
+                                <td>{seg.count.toLocaleString()}</td>
+                                <td>${formatUSDCCompact(seg.volumeUSDC)}</td>
+                                <td>{seg.avgParticipants.toFixed(2)}</td>
+                                <td>${formatUSDCCompact(seg.avgProfitPerTradeUSDC)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
-            )}
-
-            {/* Rivalry Matrix removed per request */}
-
-            {data.topSolverAnalytics && data.topSolverAnalytics.length > 0 && (
-              <div className="panel" style={{ marginTop: 16 }}>
-                <h3>Top 5 Solver Analytics</h3>
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Solver</th>
-                      <th>Wins</th>
-                      <th>Win rate</th>
-                      <th>Volume (USDC)</th>
-                      <th>Avg win margin</th>
-                      <th>P50 win margin</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.topSolverAnalytics.map(s => (
-                      <tr key={s.solverAddress}>
-                        <td><code title={s.solverAddress}>{solverLabel(s.solverAddress)}</code></td>
-                        <td>{s.wins}</td>
-                        <td>{(s.winRate * 100).toFixed(1)}%</td>
-                        <td>{Math.round(s.volumeUSDC).toLocaleString()}</td>
-                        <td>{s.avgWinMarginPct != null ? s.avgWinMarginPct.toFixed(2) + '%' : '-'}</td>
-                        <td>{s.p50WinMarginPct != null ? s.p50WinMarginPct.toFixed(2) + '%' : '-'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* Recent Trades section removed per request */}
-          </>
-        )}
+            </section>
+        </main>
       </div>
-      </div>
+    </div>
   )
 }
 
 export default App
+
+

@@ -70,6 +70,8 @@ export interface AggregatesResult {
     avgWinMarginPct: number | null
     p50WinMarginPct: number | null
   }>
+  // overall average profit per trade (controlled by includeFees in filters)
+  avgProfitPerTradeUSDC?: number
   profitStatsWithFees?: {
     count: number
     totalUSDC: number
@@ -105,6 +107,17 @@ export interface AggregatesResult {
     solverAddress: string
     singleBidWins: number
     singleBidVolumeUSDC: number
+  }>
+  // segmented analytics by notional USDC size bucket
+  sizeSegments?: Array<{
+    bucket: string
+    count: number
+    volumeUSDC: number
+    avgParticipants: number
+    avgProfitPerTradeUSDC: number
+    topByProfit: Array<{ solverAddress: string; totalProfitUSDC: number }>
+    topByWinRate: Array<{ solverAddress: string; winRate: number; tradesParticipated: number; wins: number }>
+    topByVolume: Array<{ solverAddress: string; volumeUSDC: number; wins: number }>
   }>
   tradesPreview: Array<{
     orderUid: string
