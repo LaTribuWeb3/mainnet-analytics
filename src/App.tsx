@@ -42,7 +42,7 @@ type ApiResponse = {
 }
 
 function App() {
-  const [selectedPair, setSelectedPair] = useState<PairKey>('USDC-USDE')
+  const [selectedPair, setSelectedPair] = useState<PairKey>('USDC-WETH')
   
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
