@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { formatUSDCCompact } from '../utils/format'
 
 export function BarChart({ data, xKey, yKey, height = 180, yLabel, labelFormatter }: { data: Array<Record<string, any>>; xKey: string; yKey: string; height?: number; yLabel?: string; labelFormatter?: (s: string) => string }) {
   const max = Math.max(1, ...data.map(d => Number(d[yKey]) || 0))
@@ -79,6 +80,20 @@ export function Matrix({ labels, matrix }: { labels: string[]; matrix: number[][
 export function PieChart({ data, labelKey, valueKey, size = 220 }: { data: Array<Record<string, any>>; labelKey: string; valueKey: string; size?: number }) {
   const radius = size / 2
   const total = data.reduce((a, d) => a + (Number(d[valueKey]) || 0), 0)
+  const toUpperBoundLabel = (bucket: string): string => {
+    if (!bucket) return bucket
+    if (bucket.endsWith('+')) {
+      const base = Number(bucket.slice(0, -1))
+      if (isFinite(base)) return `$${formatUSDCCompact(base)}+`
+      return bucket
+    }
+    const parts = bucket.split('..')
+    if (parts.length === 2) {
+      const hi = Number(parts[1])
+      if (isFinite(hi)) return `$${formatUSDCCompact(hi)}`
+    }
+    return bucket
+  }
   let angle = -Math.PI / 2
   const slices = data.map((d, i) => {
     const value = Number(d[valueKey]) || 0
@@ -92,13 +107,15 @@ export function PieChart({ data, labelKey, valueKey, size = 220 }: { data: Array
     const path = `M ${radius} ${radius} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`
     angle += sweep
     const hue = (i * 47) % 360
-    return { path, color: `hsl(${hue} 70% 50%)`, label: String(d[labelKey]), value, pct }
+    const rawLabel = String(d[labelKey])
+    const displayLabel = toUpperBoundLabel(rawLabel)
+    return { path, color: `hsl(${hue} 70% 50%)`, label: displayLabel, value, pct }
   })
   return (
     <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ background: '#0f172a', borderRadius: 8 }}>
         {slices.map((s, i) => (
-          <path key={i} d={s.path} fill={s.color} />
+          <path key={i} d={s.path} fill={s.color} title={`${s.label} • ${((s.pct || 0) * 100).toFixed(1)}% • $${formatUSDCCompact(s.value)}`} />
         ))}
       </svg>
       <div>
