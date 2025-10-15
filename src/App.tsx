@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import type { AggregatesResult } from './types'
 import { formatRangeBucketLabel, formatUSDCCompact } from './utils/format'
+import { PieChart } from './components/Charts'
+import { solverLabel } from './utils/solvers'
 
 type PairKey = 'USDC-USDE' | 'USDC-USDT' | 'USDC-WBTC' | 'USDC-WETH'
 
@@ -192,6 +194,81 @@ function App() {
                             ))}
                           </tbody>
                         </table>
+                      </div>
+                      <div className="panel" style={{ marginTop: 12 }}>
+                        <h3 style={{ marginTop: 0 }}>Volume share by size</h3>
+                        <PieChart data={agg.sizeSegments || []} labelKey="bucket" valueKey="volumeUSDC" />
+                      </div>
+                      <div className="panel" style={{ marginTop: 12 }}>
+                        <h3 style={{ marginTop: 0 }}>Leaders by size</h3>
+                        {agg.sizeSegments?.map(seg => (
+                          <div key={seg.bucket} style={{ marginBottom: 16 }}>
+                            <h4 style={{ margin: '8px 0' }}>{formatRangeBucketLabel(seg.bucket)}</h4>
+                            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                              <div style={{ flex: '1 1 260px' }}>
+                                <div className="muted" style={{ marginBottom: 6 }}>Top 5 by profit</div>
+                                <table className="table">
+                                  <thead>
+                                    <tr>
+                                      <th>Solver</th>
+                                      <th>Profit</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {seg.topByProfit.map(row => (
+                                      <tr key={`p-${seg.bucket}-${row.solverAddress}`}>
+                                        <td><code title={row.solverAddress}>{solverLabel(row.solverAddress)}</code></td>
+                                        <td>${formatUSDCCompact(row.totalProfitUSDC)}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                              <div style={{ flex: '1 1 260px' }}>
+                                <div className="muted" style={{ marginBottom: 6 }}>Top 5 by win rate</div>
+                                <table className="table">
+                                  <thead>
+                                    <tr>
+                                      <th>Solver</th>
+                                      <th>Win rate</th>
+                                      <th>W/T</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {seg.topByWinRate.map(row => (
+                                      <tr key={`w-${seg.bucket}-${row.solverAddress}`}>
+                                        <td><code title={row.solverAddress}>{solverLabel(row.solverAddress)}</code></td>
+                                        <td>{(row.winRate * 100).toFixed(1)}%</td>
+                                        <td>{row.wins}/{row.tradesParticipated}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                              <div style={{ flex: '1 1 260px' }}>
+                                <div className="muted" style={{ marginBottom: 6 }}>Top 5 by volume</div>
+                                <table className="table">
+                                  <thead>
+                                    <tr>
+                                      <th>Solver</th>
+                                      <th>Volume</th>
+                                      <th>Wins</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {seg.topByVolume.map(row => (
+                                      <tr key={`v-${seg.bucket}-${row.solverAddress}`}>
+                                        <td><code title={row.solverAddress}>{solverLabel(row.solverAddress)}</code></td>
+                                        <td>${formatUSDCCompact(row.volumeUSDC)}</td>
+                                        <td>{row.wins}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                       <div className="panel" style={{ marginTop: 12 }}>
                         <h3 style={{ marginTop: 0 }}>FAQ: How do we compute profit?</h3>

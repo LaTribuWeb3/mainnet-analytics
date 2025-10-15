@@ -76,4 +76,42 @@ export function Matrix({ labels, matrix }: { labels: string[]; matrix: number[][
   )
 }
 
+export function PieChart({ data, labelKey, valueKey, size = 220 }: { data: Array<Record<string, any>>; labelKey: string; valueKey: string; size?: number }) {
+  const radius = size / 2
+  const total = data.reduce((a, d) => a + (Number(d[valueKey]) || 0), 0)
+  let angle = -Math.PI / 2
+  const slices = data.map((d, i) => {
+    const value = Number(d[valueKey]) || 0
+    const pct = total > 0 ? value / total : 0
+    const sweep = pct * Math.PI * 2
+    const x1 = radius + radius * Math.cos(angle)
+    const y1 = radius + radius * Math.sin(angle)
+    const x2 = radius + radius * Math.cos(angle + sweep)
+    const y2 = radius + radius * Math.sin(angle + sweep)
+    const largeArc = sweep > Math.PI ? 1 : 0
+    const path = `M ${radius} ${radius} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`
+    angle += sweep
+    const hue = (i * 47) % 360
+    return { path, color: `hsl(${hue} 70% 50%)`, label: String(d[labelKey]), value, pct }
+  })
+  return (
+    <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ background: '#0f172a', borderRadius: 8 }}>
+        {slices.map((s, i) => (
+          <path key={i} d={s.path} fill={s.color} />
+        ))}
+      </svg>
+      <div>
+        {slices.map((s, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <div style={{ width: 12, height: 12, background: s.color, borderRadius: 2 }} />
+            <div style={{ color: '#e5e7eb' }}>{s.label}</div>
+            <div className="muted">{total > 0 ? ((s.pct * 100).toFixed(1) + '%') : '-'}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 
