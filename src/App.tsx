@@ -33,7 +33,7 @@ function App() {
   const workerRef = useRef<Worker | null>(null)
   const [fromTs, setFromTs] = useState<number | undefined>(undefined)
   const [toTs, setToTs] = useState<number | undefined>(undefined)
-  const [includeFees, setIncludeFees] = useState<boolean>(true)
+  // profits are computed without fees for now
 
   // Helpers for date handling (UTC day granularity)
   const tsToDay = (ts?: number) => ts ? new Date(ts * 1000).toISOString().slice(0, 10) : ''
@@ -78,8 +78,8 @@ function App() {
 
   useEffect(() => {
     if (!workerRef.current || !agg) return
-    workerRef.current.postMessage({ type: 'filter', criteria: { fromTs, toTs, direction: 'ALL', includeFees } })
-  }, [fromTs, toTs, includeFees])
+    workerRef.current.postMessage({ type: 'filter', criteria: { fromTs, toTs, direction: 'ALL' } })
+  }, [fromTs, toTs])
 
   // no sample preview table
 
@@ -121,10 +121,7 @@ function App() {
                     <button onClick={() => { const base = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate())); const end = new Date(base.getTime() - 1); const start = new Date(base.getTime() - 7*24*60*60*1000); setFromTs(Math.floor(start.getTime()/1000)); setToTs(Math.floor(end.getTime()/1000)); }}>Last 7 days</button>
                     <button onClick={() => { const base = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate())); const end = new Date(base.getTime() - 1); const start = new Date(base.getTime() - 30*24*60*60*1000); setFromTs(Math.floor(start.getTime()/1000)); setToTs(Math.floor(end.getTime()/1000)); }}>Last 30 days</button>
                   </div>
-                  <label style={{ marginLeft: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <input type="checkbox" checked={includeFees} onChange={e => setIncludeFees(e.target.checked)} />
-                    Include fees in profit
-                  </label>
+                  
                 </div>
 
                 {isLoading && <div className="muted">Loading {selectedPair}…</div>}
@@ -160,6 +157,7 @@ function App() {
                     </div>
 
                     {agg && (
+                      <>
                       <div className="panel" style={{ marginTop: 12 }}>
                         <h3 style={{ marginTop: 0 }}>Volume repartition by order size</h3>
                         <table className="table">
@@ -185,6 +183,17 @@ function App() {
                           </tbody>
                         </table>
                       </div>
+                      <div className="panel" style={{ marginTop: 12 }}>
+                        <h3 style={{ marginTop: 0 }}>FAQ: How do we compute profit?</h3>
+                        <ul style={{ margin: 0, paddingLeft: 18 }}>
+                          <li>We consider the winner's price for the order (USDC per base asset).</li>
+                          <li>We compare it to the same-block benchmark price (block high for USDC/base).</li>
+                          <li>For base sold (e.g., WBTC/WETH → USDC): profit = (winnerPrice - benchmark) × baseQuantity.</li>
+                          <li>For base bought (USDC → WBTC/WETH): profit = (benchmark - winnerPrice) × baseQuantity.</li>
+                          <li>Negative values are clamped to zero; fees are currently ignored.</li>
+                        </ul>
+                      </div>
+                      </>
                     )}
                   </>
                 )}
