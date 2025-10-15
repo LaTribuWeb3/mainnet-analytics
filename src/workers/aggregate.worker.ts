@@ -1,8 +1,8 @@
 /// <reference lib="webworker" />
-import { computePriceUSDCPerBase, computePriceUSDCPerToken, blockHighUSDCPerBase, blockMidUSDCPerBase, normalizeAmount, TOKENS, toDay, percentDiff, higherPriceIsBetterUSDCPerBase, higherPriceIsBetterUSDCPerToken } from '../utils/price'
+import { computePriceUSDCPerToken, blockHighUSDCPerBase, blockMidUSDCPerBase, normalizeAmount, TOKENS, toDay, percentDiff, higherPriceIsBetterUSDCPerToken } from '../utils/price'
 import type { AggregatesResult, TradeRecord, SolverStats } from '../types'
 
-type FilterCriteria = { fromTs?: number; toTs?: number; direction?: 'USDC_to_WBTC' | 'WBTC_to_USDC' | 'ALL'; minNotional?: number; maxNotional?: number }
+type FilterCriteria = { fromTs?: number; toTs?: number; direction?: 'USDC_to_WBTC' | 'WBTC_to_USDC' | 'ALL'; minNotional?: number; maxNotional?: number; solverIncludes?: string }
 type MsgIn = { type: 'aggregate'; filePath: string; altFileUrl?: string } | { type: 'filter'; criteria: FilterCriteria } | { type: 'hydrate'; index: TradeIdx[] }
 type MsgOut =
   | { type: 'progress'; loaded: number }
@@ -412,13 +412,14 @@ function selectBenchmark(prices: any, bench: 'high' | 'mid' | 'low'): number | n
 }
 
 function computeAggregatesFromIndex(index: TradeIdx[], criteria: FilterCriteria): AggregatesResult {
-  const { fromTs, toTs, direction, minNotional, maxNotional } = criteria
+  const { fromTs, toTs, direction, minNotional, maxNotional, solverIncludes } = criteria
   const filtered = index.filter(t =>
     (fromTs == null || t.ts >= fromTs) &&
     (toTs == null || t.ts <= toTs) &&
     (direction == null || direction === 'ALL' || t.direction === direction) &&
     (minNotional == null || t.notionalUSDC >= minNotional) &&
-    (maxNotional == null || t.notionalUSDC <= maxNotional)
+    (maxNotional == null || t.notionalUSDC <= maxNotional) &&
+    (solverIncludes == null || t.solvers.some(s => s.toLowerCase() === solverIncludes.toLowerCase()))
   )
 
   const totalTrades = filtered.length

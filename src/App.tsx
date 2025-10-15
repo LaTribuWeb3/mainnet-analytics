@@ -28,6 +28,7 @@ type ApiResponse = {
 
 function App() {
   const [selectedPair, setSelectedPair] = useState<PairKey>('USDC-USDE')
+  const [activeView, setActiveView] = useState<'analytics' | 'solver'>('analytics')
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
   const [apiData, setApiData] = useState<ApiResponse | null>(null)
@@ -80,8 +81,10 @@ function App() {
 
   useEffect(() => {
     if (!workerRef.current || !agg) return
-    workerRef.current.postMessage({ type: 'filter', criteria: { fromTs, toTs, direction: 'ALL' } })
-  }, [fromTs, toTs])
+    const baseCriteria: any = { fromTs, toTs, direction: 'ALL' }
+    if (activeView === 'solver') baseCriteria.solverIncludes = '0xa97851357e99082762c972f794b2a29e629511a7'
+    workerRef.current.postMessage({ type: 'filter', criteria: baseCriteria })
+  }, [fromTs, toTs, activeView])
 
   // no sample preview table
 
@@ -90,10 +93,14 @@ function App() {
       <div className="container">
         <header className="header">
           <h1>Mainnet Analytics</h1>
+          <div className="tabs">
+            <button className={activeView==='analytics' ? 'active' : ''} onClick={() => setActiveView('analytics')}>Market</button>
+            {/*   <button className={activeView==='solver' ? 'active' : ''} onClick={() => setActiveView('solver')}>Solver: Prycto</button> */}
+          </div>
         </header>
 
         <main className="page">
-            <section>
+            <section style={{ display: activeView==='analytics' ? 'block' : 'none' }}>
               <h2>Analytics</h2>
               <div className="panel" style={{ marginTop: 12 }}>
                 <div className="controls" style={{ marginBottom: 12 }}>
@@ -282,6 +289,38 @@ function App() {
                       </div>
                       </>
                     )}
+                  </>
+                )}
+              </div>
+            </section>
+            <section style={{ display: activeView==='solver' ? 'block' : 'none' }}>
+              <h2>Solver Analysis: Prycto</h2>
+              <div className="panel" style={{ marginTop: 12 }}>
+                <div className="controls" style={{ marginBottom: 12 }}>
+                  <div className="muted">Orders participated by solver 0xa97851357e99082762c972f794b2a29e629511a7</div>
+                  <div className="muted">Time range filters above apply here as well.</div>
+                </div>
+                {!isLoading && !error && agg && (
+                  <>
+                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                      <div className="panel" style={{ flex: '0 0 auto' }}>
+                        <div className="muted">Total trades (filtered)</div>
+                        <div className="val">{agg.totalTrades.toLocaleString()}</div>
+                      </div>
+                      <div className="panel" style={{ flex: '0 0 auto' }}>
+                        <div className="muted">Avg profit / trade</div>
+                        <div className="val">{(() => {
+                          const avgProfit = agg.avgProfitPerTradeUSDC || 0
+                          const meanNotional = (agg.totalNotionalUSDC || 0) / Math.max(1, agg.totalTrades || 0)
+                          const bps = meanNotional > 0 ? (avgProfit / meanNotional) * 10000 : 0
+                          return `$${formatUSDCCompact(avgProfit)} (${bps.toFixed(1)} bps)`
+                        })()}</div>
+                      </div>
+                    </div>
+                    <div className="panel" style={{ marginTop: 12 }}>
+                      <h3 style={{ marginTop: 0 }}>Volume share by size</h3>
+                      <PieChart data={agg.sizeSegments || []} labelKey="bucket" valueKey="volumeUSDC" />
+                    </div>
                   </>
                 )}
               </div>
