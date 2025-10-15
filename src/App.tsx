@@ -8,7 +8,7 @@ import { solverLabel } from './utils/solvers'
 type WorkerMsg =
   | { type: 'progress'; loaded: number }
   | { type: 'done'; data: AggregatesResult }
-  | { type: 'filtered'; data: AggregatesResult }
+  | { type: 'filtered'; data: AggregatesResult; criteria?: FilterCriteriaLike }
   | { type: 'error'; error: string }
 
 type FilterCriteriaLike = {
@@ -48,6 +48,7 @@ function App() {
   const [error, setError] = useState<string | null>(null)
   const [apiData, setApiData] = useState<ApiResponse | null>(null)
   const [agg, setAgg] = useState<AggregatesResult | null>(null)
+  const [aggPrycto, setAggPrycto] = useState<AggregatesResult | null>(null)
   const workerRef = useRef<Worker | null>(null)
   const [fromTs, setFromTs] = useState<number | undefined>(undefined)
   const [toTs, setToTs] = useState<number | undefined>(undefined)
@@ -78,7 +79,12 @@ function App() {
           workerRef.current = new Worker(new URL('./workers/aggregate.worker.ts', import.meta.url), { type: 'module' })
           workerRef.current.onmessage = (ev: MessageEvent<WorkerMsg>) => {
             const msg = ev.data
-            if (msg?.type === 'done' || msg?.type === 'filtered') setAgg(msg.data as AggregatesResult)
+            if (msg?.type === 'done') setAgg(msg.data as AggregatesResult)
+            if (msg?.type === 'filtered') {
+              const crit = msg.criteria
+              if (crit?.solverIncludes) setAggPrycto(msg.data as AggregatesResult)
+              else setAgg(msg.data as AggregatesResult)
+            }
             if (msg?.type === 'error') setError(String(msg.error || 'Worker error'))
           }
         }
@@ -98,10 +104,12 @@ function App() {
 
   useEffect(() => {
     if (!workerRef.current || !agg) return
-    const criteria: FilterCriteriaLike = { fromTs, toTs, direction: 'ALL' }
-    if (onlyPrycto) criteria.solverIncludes = '0xa97851357e99082762c972f794b2a29e629511a7'
-    workerRef.current.postMessage({ type: 'filter', criteria })
-  }, [fromTs, toTs, onlyPrycto, agg])
+    const base: FilterCriteriaLike = { fromTs, toTs, direction: 'ALL' }
+    // overall
+    workerRef.current.postMessage({ type: 'filter', criteria: base })
+    // pryclto-specific snapshot for the section
+    workerRef.current.postMessage({ type: 'filter', criteria: { ...base, solverIncludes: '0xa97851357e99082762c972f794b2a29e629511a7' } })
+  }, [fromTs, toTs, agg])
 
   // no sample preview table
 
@@ -224,6 +232,64 @@ function App() {
                         <h3 style={{ marginTop: 0 }}>Volume share by size</h3>
                         <PieChart data={agg.sizeSegments || []} labelKey="bucket" valueKey="volumeUSDC" />
                       </div>
+                      {aggPrycto && (
+                        <div className="panel" style={{ marginTop: 12 }}>
+                          <h3 style={{ marginTop: 0 }}>Prycto snapshot (selected timespan)</h3>
+                          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                            <div className="panel" style={{ flex: '0 0 auto' }}>
+                              <div className="muted">Trades</div>
+                              <div className="val">{aggPrycto.totalTrades.toLocaleString()}</div>
+                            </div>
+                            <div className="panel" style={{ flex: '0 0 auto' }}>
+                              <div className="muted">Volume</div>
+                              <div className="val">${formatUSDCCompact(aggPrycto.totalNotionalUSDC)}</div>
+                            </div>
+                            <div className="panel" style={{ flex: '0 0 auto' }}>
+                              <div className="muted">Share of total volume</div>
+                              <div className="val">{(() => {
+                                const share = (agg.totalNotionalUSDC || 0) > 0 ? (aggPrycto.totalNotionalUSDC / agg.totalNotionalUSDC) * 100 : 0
+                                return `${share.toFixed(2)}%`
+                              })()}</div>
+                            </div>
+                            <div className="panel" style={{ flex: '0 0 auto' }}>
+                              <div className="muted">Avg profit / trade</div>
+                              <div className="val">{(() => {
+                                const avgProfit = aggPrycto.avgProfitPerTradeUSDC || 0
+                                const meanNotional = (aggPrycto.totalNotionalUSDC || 0) / Math.max(1, aggPrycto.totalTrades || 0)
+                                const bps = meanNotional > 0 ? (avgProfit / meanNotional) * 10000 : 0
+                                return `$${formatUSDCCompact(avgProfit)} (${bps.toFixed(1)} bps)`
+                              })()}</div>
+                            </div>
+                          </div>
+                          <div className="panel" style={{ marginTop: 12 }}>
+                            <h4 style={{ marginTop: 0 }}>Volume share by size (Prycto vs total)</h4>
+                            <table className="table">
+                              <thead>
+                                <tr>
+                                  <th>Bucket</th>
+                                  <th>Prycto vol</th>
+                                  <th>Total vol</th>
+                                  <th>Share</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {agg.sizeSegments?.map(totalSeg => {
+                                  const pSeg = aggPrycto.sizeSegments?.find(s => s.bucket === totalSeg.bucket)
+                                  const share = totalSeg.volumeUSDC > 0 ? ((pSeg?.volumeUSDC || 0) / totalSeg.volumeUSDC) * 100 : 0
+                                  return (
+                                    <tr key={`pry-${totalSeg.bucket}`}>
+                                      <td>{formatRangeBucketLabel(totalSeg.bucket)}</td>
+                                      <td>${formatUSDCCompact(pSeg?.volumeUSDC || 0)}</td>
+                                      <td>${formatUSDCCompact(totalSeg.volumeUSDC)}</td>
+                                      <td>{share.toFixed(2)}%</td>
+                                    </tr>
+                                  )
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
                       <div className="panel" style={{ marginTop: 12 }}>
                         <h3 style={{ marginTop: 0 }}>Leaders by size</h3>
                         {agg.sizeSegments?.map(seg => (

@@ -7,7 +7,7 @@ type MsgIn = { type: 'aggregate'; filePath: string; altFileUrl?: string } | { ty
 type MsgOut =
   | { type: 'progress'; loaded: number }
   | { type: 'done'; data: AggregatesResult }
-  | { type: 'filtered'; data: AggregatesResult }
+  | { type: 'filtered'; data: AggregatesResult; criteria?: FilterCriteria }
   | { type: 'error'; error: string }
 
 type TradeIdx = {
@@ -36,7 +36,7 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
     if (ev.data.type === 'filter') {
       if (!GLOBAL_INDEX) throw new Error('No index present; load data first')
       const out = computeAggregatesFromIndex(GLOBAL_INDEX, ev.data.criteria)
-      ctx.postMessage({ type: 'filtered', data: out } satisfies MsgOut)
+      ctx.postMessage({ type: 'filtered', data: out, criteria: ev.data.criteria } satisfies MsgOut)
       return
     }
     // aggregate
