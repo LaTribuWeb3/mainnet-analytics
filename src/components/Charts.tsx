@@ -18,16 +18,16 @@ export function BarChart({ data, xKey, yKey, height = 180, yLabel, labelFormatte
   const gap = 8
   const barW = Math.max(12, Math.floor((containerW - gap * Math.max(0, data.length - 1)) / Math.max(1, data.length)))
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: `24px 1fr`, gap: 8 }}>
-      <div style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', color: '#9ca3af', fontSize: 12, alignSelf: 'center' }}>{yLabel || 'count'}</div>
-      <div ref={barsRef} style={{ display: 'flex', alignItems: 'end', gap, height, width: '100%', overflowX: 'hidden', overflowY: 'visible' }}>
+    <div className="grid grid-cols-[24px_1fr] gap-2">
+      <div className="self-center rotate-180 [writing-mode:vertical-rl] text-xs text-slate-400">{yLabel || 'count'}</div>
+      <div ref={barsRef} className="flex items-end w-full overflow-x-hidden overflow-y-visible" style={{ gap, height }}>
         {data.map((d, i) => {
           const v = Number(d[yKey]) || 0
           const h = Math.round((v / max) * (height - 24))
           return (
-            <div key={i} title={`${d[xKey]}: ${v}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <div style={{ width: barW, height: h, background: 'linear-gradient(180deg,#7ab8ff,#4f86e6)', borderRadius: 6 }} />
-              <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 6, width: barW, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <div key={i} title={`${d[xKey]}: ${v}`} className="flex flex-col items-center">
+              <div style={{ width: barW, height: h, background: 'linear-gradient(180deg,#7ab8ff,#4f86e6)' }} className="rounded-md" />
+              <div className="mt-1 w-full text-center text-[11px] text-slate-400 whitespace-nowrap overflow-hidden text-ellipsis" style={{ width: barW }}>
                 {labelFormatter ? labelFormatter(String(d[xKey])) : String(d[xKey])}
               </div>
             </div>
@@ -43,7 +43,7 @@ export function LineChart({ points, height = 160 }: { points: Array<{ x: string;
   const min = Math.min(0, ...points.map(p => p.y))
   const range = Math.max(1, max - min)
   return (
-    <svg width="100%" height={height} viewBox={`0 0 ${points.length || 1} ${range}`} preserveAspectRatio="none" style={{ background: '#0f172a', borderRadius: 8 }}>
+    <svg width="100%" height={height} viewBox={`0 0 ${points.length || 1} ${range}`} preserveAspectRatio="none" className="rounded-lg" style={{ background: '#0f172a' }}>
       <polyline
         fill="none"
         stroke="#60a5fa"
@@ -56,7 +56,7 @@ export function LineChart({ points, height = 160 }: { points: Array<{ x: string;
 
 export function Matrix({ labels, matrix }: { labels: string[]; matrix: number[][] }) {
   return (
-    <table className="table">
+    <table className="w-full border-collapse text-sm">
       <thead>
         <tr>
           <th>Solver</th>

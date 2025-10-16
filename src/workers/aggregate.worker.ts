@@ -21,6 +21,11 @@ type TradeIdx = {
   solvers: string[]
   profitUSDCWithFees: number
   profitUSDCNoFees: number
+  // for per-solver analytics in filters
+  solverRanks?: Record<string, number>
+  solverPrices?: Record<string, number>
+  winnerPrice?: number
+  higherIsBetter?: boolean
 }
 
 const ctx: DedicatedWorkerGlobalScope = self as any
@@ -136,6 +141,10 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
           winnerPrice = solutionPrices.find(x => x.s.isWinner)?.p ?? null
           const second = solutionPrices.find(x => !x.s.isWinner)
           secondPrice = second?.p ?? null
+          // Build rank and price maps for index analytics
+          const ranks: Record<string, number> = {}
+          const prices: Record<string, number> = {}
+          solutionPrices.forEach((x, i) => { ranks[x.s.solverAddress] = i + 1; prices[x.s.solverAddress] = x.p })
           // compute margin vs block high
           const benchmark = selectBenchmark(tr.eventBlockPrices as any, 'high')
           if (winnerPrice != null && benchmark != null) {
@@ -151,6 +160,11 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
             }
           }
           topSolutions = solutionPrices.slice(0, 5).map((x, i) => ({ solver: x.s.solverAddress, priceUSDCPerBTC: x.p, rank: i + 1 }))
+          // attach to index placeholder (added below after push)
+          // we'll set these after index.push; alternatively keep temp to assign
+          ;(tr as any).__tmpRanks = ranks
+          ;(tr as any).__tmpPrices = prices
+          ;(tr as any).__tmpHigherIsBetter = higherIsBetter
         }
       }
 
@@ -191,6 +205,10 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
         solvers: Array.from(new Set(tr.competitionSolutions.map(s => s.solverAddress))),
         profitUSDCWithFees: 0,
         profitUSDCNoFees: 0,
+        solverRanks: (tr as any).__tmpRanks,
+        solverPrices: (tr as any).__tmpPrices,
+        winnerPrice: winnerPrice ?? undefined,
+        higherIsBetter: (tr as any).__tmpHigherIsBetter,
       })
 
       // profit estimation (USDC) vs second-best solution
@@ -272,8 +290,8 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
       ]
     )
     const participationHistogram = bucketize(participation, [1,2,3,4,5,6,8,10,12,16,20])
-    // Size buckets (USDC notional): 0-1k, 1k-10k, 10k-100k, 100k-500k, 500k-2M, 2M+
-    const sizeBuckets = [0, 1e3, 1e4, 1e5, 5e5, 2e6]
+    // Size buckets (USDC notional): 0-1k, 1k-10k, 10k-20k, 20k-50k, 50k-100k, 100k-500k, 500k-2M, 2M+
+    const sizeBuckets = [0, 1e3, 1e4, 2e4, 5e4, 1e5, 5e5, 2e6]
     const sizeHistogram = bucketize(tradesPreview.map(t => t.notionalUSDC), sizeBuckets)
     const sizeStats = summarize(tradesPreview.map(t => t.notionalUSDC))
     // Single-bid distributions and leaderboard
@@ -479,7 +497,7 @@ function computeAggregatesFromIndex(index: TradeIdx[], criteria: FilterCriteria)
   const avgProfitPerTradeUSDC = filtered.length ? totalProfit / filtered.length : 0
 
   // size-segment analytics
-  const sizeEdges = [0, 1e3, 1e4, 1e5, 5e5, 2e6]
+  const sizeEdges = [0, 1e3, 1e4, 2e4, 5e4, 1e5, 5e5, 2e6]
   const sizeLabels: string[] = []
   for (let i = 0; i < sizeEdges.length - 1; i++) sizeLabels.push(`${sizeEdges[i]}..${sizeEdges[i+1]}`)
   sizeLabels.push(`${sizeEdges[sizeEdges.length - 1]}+`)
@@ -491,6 +509,8 @@ function computeAggregatesFromIndex(index: TradeIdx[], criteria: FilterCriteria)
     profitBySolver: Map<string, number>
     winBySolver: Map<string, { wins: number; participated: number }>
     volumeBySolver: Map<string, number>
+    rankCounts?: Map<number, number>
+    lossDeltas?: number[]
   }
   const buckets: BucketAgg[] = sizeLabels.map(() => ({
     count: 0,
@@ -500,11 +520,14 @@ function computeAggregatesFromIndex(index: TradeIdx[], criteria: FilterCriteria)
     profitBySolver: new Map(),
     winBySolver: new Map(),
     volumeBySolver: new Map(),
+    rankCounts: new Map<number, number>(),
+    lossDeltas: [],
   }))
   const bucketIndex = (v: number) => {
     for (let i = 0; i < sizeEdges.length - 1; i++) if (v >= sizeEdges[i] && v < sizeEdges[i+1]) return i
     return sizeLabels.length - 1
   }
+  let capturedTotal = 0
   for (const t of filtered) {
     const bi = bucketIndex(t.notionalUSDC)
     const b = buckets[bi]
@@ -518,6 +541,11 @@ function computeAggregatesFromIndex(index: TradeIdx[], criteria: FilterCriteria)
       b.profitBySolver.set(t.winner, (b.profitBySolver.get(t.winner) ?? 0) + prof)
       b.volumeBySolver.set(t.winner, (b.volumeBySolver.get(t.winner) ?? 0) + t.notionalUSDC)
     }
+    // If a solverIncludes filter is applied, track captured volume per bucket and total
+    if (criteria.solverIncludes && t.winner.toLowerCase() === criteria.solverIncludes.toLowerCase()) {
+      (b as any).capturedVolumeUSDC = ((b as any).capturedVolumeUSDC || 0) + t.notionalUSDC
+      capturedTotal += t.notionalUSDC
+    }
     // win rate by solver, count participation
     const uniq = new Set(t.solvers)
     for (const s of uniq) {
@@ -526,12 +554,29 @@ function computeAggregatesFromIndex(index: TradeIdx[], criteria: FilterCriteria)
       if (t.winner === s) rec.wins += 1
       b.winBySolver.set(s, rec)
     }
+    // If analyzing a specific solver, accumulate rank and loss deltas for that solver
+    if (criteria.solverIncludes) {
+      const addr = criteria.solverIncludes.toLowerCase()
+      const ranks = t.solverRanks || {}
+      const prices = t.solverPrices || {}
+      const myRank = ranks[addr]
+      if (myRank != null) b.rankCounts!.set(myRank, (b.rankCounts!.get(myRank) || 0) + 1)
+      const higherIsBetter = t.higherIsBetter ?? true
+      const myPrice = prices[addr]
+      const winPrice = t.winnerPrice
+      if (myPrice != null && winPrice != null && t.winner.toLowerCase() !== addr) {
+        const delta = higherIsBetter ? (winPrice - myPrice) : (myPrice - winPrice)
+        if (isFinite(delta)) b.lossDeltas!.push(delta)
+      }
+    }
   }
   const sizeSegments = sizeLabels.map((bucket, i) => {
     const b = buckets[i]
     const topByProfit = Array.from(b.profitBySolver.entries()).sort((a,b) => b[1] - a[1]).slice(0, 5).map(([solverAddress, totalProfitUSDC]) => ({ solverAddress, totalProfitUSDC }))
     const topByWinRate = Array.from(b.winBySolver.entries()).map(([solverAddress, r]) => ({ solverAddress, winRate: r.participated ? r.wins / r.participated : 0, tradesParticipated: r.participated, wins: r.wins })).sort((a,b) => b.winRate - a.winRate).slice(0, 5)
     const topByVolume = Array.from(b.volumeBySolver.entries()).sort((a,b) => b[1] - a[1]).slice(0,5).map(([solverAddress, volumeUSDC]) => ({ solverAddress, volumeUSDC, wins: (b.winBySolver.get(solverAddress)?.wins ?? 0) }))
+    const rankHistogram = Array.from((b.rankCounts || new Map()).entries()).sort((a,b) => a[0]-b[0]).map(([rank, count]) => ({ rank, count }))
+    const lossDeltaAvg = (b.lossDeltas && b.lossDeltas.length) ? (b.lossDeltas.reduce((a,c)=>a+c,0) / b.lossDeltas.length) : undefined
     return {
       bucket,
       count: b.count,
@@ -541,6 +586,9 @@ function computeAggregatesFromIndex(index: TradeIdx[], criteria: FilterCriteria)
       topByProfit,
       topByWinRate,
       topByVolume,
+      capturedVolumeUSDC: (b as any).capturedVolumeUSDC || 0,
+      rankHistogram: criteria.solverIncludes ? rankHistogram : undefined,
+      lossDeltaAvg: criteria.solverIncludes ? lossDeltaAvg : undefined,
     }
   })
 
@@ -557,6 +605,7 @@ function computeAggregatesFromIndex(index: TradeIdx[], criteria: FilterCriteria)
     rivalryMatrix: { solvers: topSolvers, matrix },
     avgProfitPerTradeUSDC,
     sizeSegments,
+    capturedVolumeUSDC: capturedTotal || undefined,
     tradesPreview: filtered.slice(0, 200).map(t => ({
       orderUid: t.orderUid,
       timestamp: t.ts,

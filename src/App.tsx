@@ -212,25 +212,37 @@ function App() {
                               <th>Size bucket</th>
                               <th>Trades</th>
                               <th>Volume</th>
+                              <th>Cumulated volume</th>
+                              <th>% of total</th>
                               <th>Avg participants</th>
                               <th>Avg profit/trade</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {agg.sizeSegments?.map(seg => (
-                              <tr key={seg.bucket}>
-                                <td>{formatRangeBucketLabel(seg.bucket)}</td>
-                                <td>{seg.count.toLocaleString()}</td>
-                                <td>${formatUSDCCompact(seg.volumeUSDC)}</td>
-                                <td>{seg.avgParticipants.toFixed(2)}</td>
-                                <td>{(() => {
-                                  const avgProfit = seg.avgProfitPerTradeUSDC
-                                  const meanNotional = seg.count ? (seg.volumeUSDC / seg.count) : 0
-                                  const bps = meanNotional > 0 ? (avgProfit / meanNotional) * 10000 : 0
-                                  return `$${formatUSDCCompact(avgProfit)} (${bps.toFixed(1)} bps)`
-                                })()}</td>
-                              </tr>
-                            ))}
+                            {(() => {
+                              const totalVol = agg.totalNotionalUSDC || 0
+                              let cumVol = 0
+                              return (agg.sizeSegments || []).map(seg => {
+                                cumVol += seg.volumeUSDC
+                                const pct = totalVol > 0 ? (cumVol / totalVol) * 100 : 0
+                                return (
+                                  <tr key={seg.bucket}>
+                                    <td>{formatRangeBucketLabel(seg.bucket)}</td>
+                                    <td>{seg.count.toLocaleString()}</td>
+                                    <td>${formatUSDCCompact(seg.volumeUSDC)}</td>
+                                    <td>${formatUSDCCompact(cumVol)}</td>
+                                    <td>{pct.toFixed(2)}%</td>
+                                    <td>{seg.avgParticipants.toFixed(2)}</td>
+                                    <td>{(() => {
+                                      const avgProfit = seg.avgProfitPerTradeUSDC
+                                      const meanNotional = seg.count ? (seg.volumeUSDC / seg.count) : 0
+                                      const bps = meanNotional > 0 ? (avgProfit / meanNotional) * 10000 : 0
+                                      return `$${formatUSDCCompact(avgProfit)} (${bps.toFixed(1)} bps)`
+                                    })()}</td>
+                                  </tr>
+                                )
+                              })
+                            })()}
                           </tbody>
                         </table>
                       </div>
@@ -277,24 +289,54 @@ function App() {
                               <thead>
                                 <tr>
                                   <th>Bucket</th>
-                                  <th>Prycto vol</th>
+                                  <th>Prycto captured</th>
+                                  <th>Prycto participation</th>
                                   <th>Total vol</th>
-                                  <th>Share</th>
+                                  <th>Captured share</th>
+                                  <th>Participation share</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {agg.sizeSegments?.map(totalSeg => {
                                   const pSeg = aggPrycto.sizeSegments?.find(s => s.bucket === totalSeg.bucket)
-                                  const share = totalSeg.volumeUSDC > 0 ? ((pSeg?.volumeUSDC || 0) / totalSeg.volumeUSDC) * 100 : 0
+                                  const captured = pSeg?.capturedVolumeUSDC || 0
+                                  const participated = pSeg?.volumeUSDC || 0
+                                  const capturedShare = totalSeg.volumeUSDC > 0 ? (captured / totalSeg.volumeUSDC) * 100 : 0
+                                  const participationShare = totalSeg.volumeUSDC > 0 ? (participated / totalSeg.volumeUSDC) * 100 : 0
                                   return (
                                     <tr key={`pry-${totalSeg.bucket}`}>
                                       <td>{formatRangeBucketLabel(totalSeg.bucket)}</td>
-                                      <td>${formatUSDCCompact(pSeg?.volumeUSDC || 0)}</td>
+                                      <td>${formatUSDCCompact(captured)}</td>
+                                      <td>${formatUSDCCompact(participated)}</td>
                                       <td>${formatUSDCCompact(totalSeg.volumeUSDC)}</td>
-                                      <td>{share.toFixed(2)}%</td>
+                                      <td>{capturedShare.toFixed(2)}%</td>
+                                      <td>{participationShare.toFixed(2)}%</td>
                                     </tr>
                                   )
                                 })}
+                              </tbody>
+                            </table>
+                          </div>
+                          <div className="panel" style={{ marginTop: 12 }}>
+                            <h4 style={{ marginTop: 0 }}>Prycto competition per size</h4>
+                            <table className="table">
+                              <thead>
+                                <tr>
+                                  <th>Bucket</th>
+                                  <th>Rank distribution</th>
+                                  <th>Avg loss delta (USDC/token)</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(aggPrycto.sizeSegments || []).map(seg => (
+                                  <tr key={`pry-rank-${seg.bucket}`}>
+                                    <td>{formatRangeBucketLabel(seg.bucket)}</td>
+                                    <td>{seg.rankHistogram && seg.rankHistogram.length
+                                      ? seg.rankHistogram.map(r => `${r.rank}:${r.count}`).join(', ')
+                                      : '-'}</td>
+                                    <td>{seg.lossDeltaAvg != null ? seg.lossDeltaAvg.toFixed(6) : '-'}</td>
+                                  </tr>
+                                ))}
                               </tbody>
                             </table>
                           </div>

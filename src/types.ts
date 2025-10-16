@@ -118,6 +118,11 @@ export interface AggregatesResult {
     topByProfit: Array<{ solverAddress: string; totalProfitUSDC: number }>
     topByWinRate: Array<{ solverAddress: string; winRate: number; tradesParticipated: number; wins: number }>
     topByVolume: Array<{ solverAddress: string; volumeUSDC: number; wins: number }>
+    // if a solver filter is applied, capturedVolumeUSDC is the volume won by that solver in this bucket
+    capturedVolumeUSDC?: number
+    // if a solver filter is applied, per-bucket rank distribution and average loss delta vs winner
+    rankHistogram?: Array<{ rank: number; count: number }>
+    lossDeltaAvg?: number
   }>
   tradesPreview: Array<{
     orderUid: string
@@ -134,6 +139,8 @@ export interface AggregatesResult {
   // summaries for readability
   participationStats?: { count: number; min: number; p25: number; p50: number; p75: number; max: number; avg: number }
   marginStats?: { count: number; minPct: number; p25Pct: number; p50Pct: number; p75Pct: number; maxPct: number; avgPct: number }
+  // if a solver filter is applied, capturedVolumeUSDC is the total volume won by that solver
+  capturedVolumeUSDC?: number
 }
 
 
