@@ -21,6 +21,9 @@ type TradeIdx = {
   solvers: string[]
   profitUSDCWithFees: number
   profitUSDCNoFees: number
+  // profit vs market (block mid) in USDC
+  profitVsMarketUSDCWithFees?: number
+  profitVsMarketUSDCNoFees?: number
   // for per-solver analytics in filters
   solverRanks?: Record<string, number>
   solverPrices?: Record<string, number>
@@ -110,6 +113,8 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
                 }))
               : []) as any,
         eventBlockPrices: (trIn.eventBlockPrices || trIn.blockPrices || {}) as any,
+        buyUsdcPrice: trIn.buyUsdcPrice,
+        sellUsdcPrice: trIn.sellUsdcPrice,
       }
       totalTrades += 1
       const winner = tr.competitionSolutions.find(s => s.isWinner)
@@ -233,6 +238,33 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
           if (last && last.orderUid === tr.orderUid) {
             last.profitUSDCWithFees = withFees
             last.profitUSDCNoFees = noFees
+          }
+        }
+      }
+
+      // profit estimation (USDC) vs market (prefer API usdc prices, fallback to block mid)
+      if (winnerPrice != null) {
+        const sellTokenLc = tr.sellToken.toLowerCase()
+        const buyTokenLc = tr.buyToken.toLowerCase()
+        const higherIsBetter = higherPriceIsBetterUSDCPerToken(tr.sellToken, tr.buyToken) ?? true
+        let tokenQty = 0
+        if (sellTokenLc === TOKENS.USDC) tokenQty = normalizeAmount(tr.buyAmount, tr.buyToken)
+        else if (buyTokenLc === TOKENS.USDC) tokenQty = normalizeAmount(tr.sellAmount, tr.sellToken)
+        let marketMid: number | null = null
+        if (sellTokenLc === TOKENS.USDC && buyTokenLc !== TOKENS.USDC) {
+          marketMid = tr.buyUsdcPrice ?? null
+        } else if (buyTokenLc === TOKENS.USDC && sellTokenLc !== TOKENS.USDC) {
+          marketMid = tr.sellUsdcPrice ?? null
+        }
+        if (marketMid == null) marketMid = selectBenchmark(tr.eventBlockPrices as any, 'mid')
+        if (tokenQty > 0 && marketMid != null) {
+          const improvementVsMarket = higherIsBetter ? (winnerPrice - marketMid) : (marketMid - winnerPrice)
+          const noFeesMarket = Math.max(0, improvementVsMarket * tokenQty)
+          const withFeesMarket = noFeesMarket // fees ignored for now
+          const last = index[index.length - 1]
+          if (last && last.orderUid === tr.orderUid) {
+            last.profitVsMarketUSDCWithFees = withFeesMarket
+            last.profitVsMarketUSDCNoFees = noFeesMarket
           }
         }
       }
@@ -506,22 +538,26 @@ function computeAggregatesFromIndex(index: TradeIdx[], criteria: FilterCriteria)
     volumeUSDC: number
     participantsSum: number
     profitSum: number
+    profitVsMarketSum: number
     profitBySolver: Map<string, number>
     winBySolver: Map<string, { wins: number; participated: number }>
     volumeBySolver: Map<string, number>
     rankCounts?: Map<number, number>
     lossDeltas?: number[]
+    lossBps?: number[]
   }
   const buckets: BucketAgg[] = sizeLabels.map(() => ({
     count: 0,
     volumeUSDC: 0,
     participantsSum: 0,
     profitSum: 0,
+    profitVsMarketSum: 0,
     profitBySolver: new Map(),
     winBySolver: new Map(),
     volumeBySolver: new Map(),
     rankCounts: new Map<number, number>(),
     lossDeltas: [],
+    lossBps: [],
   }))
   const bucketIndex = (v: number) => {
     for (let i = 0; i < sizeEdges.length - 1; i++) if (v >= sizeEdges[i] && v < sizeEdges[i+1]) return i
@@ -536,6 +572,8 @@ function computeAggregatesFromIndex(index: TradeIdx[], criteria: FilterCriteria)
     b.participantsSum += t.participants
     const prof = t.profitUSDCNoFees
     b.profitSum += prof
+    const profMkt = t.profitVsMarketUSDCNoFees || 0
+    b.profitVsMarketSum += profMkt
     // profit and volume by solver (winner)
     if (t.winner) {
       b.profitBySolver.set(t.winner, (b.profitBySolver.get(t.winner) ?? 0) + prof)
@@ -566,7 +604,15 @@ function computeAggregatesFromIndex(index: TradeIdx[], criteria: FilterCriteria)
       const winPrice = t.winnerPrice
       if (myPrice != null && winPrice != null && t.winner.toLowerCase() !== addr) {
         const delta = higherIsBetter ? (winPrice - myPrice) : (myPrice - winPrice)
-        if (isFinite(delta)) b.lossDeltas!.push(delta)
+        if (isFinite(delta)) {
+          b.lossDeltas!.push(delta)
+          // bps relative to winner price
+          const denom = winPrice === 0 ? null : winPrice
+          if (denom != null && isFinite(denom)) {
+            const bps = (delta / denom) * 10000
+            if (isFinite(bps)) b.lossBps!.push(bps)
+          }
+        }
       }
     }
   }
@@ -577,18 +623,21 @@ function computeAggregatesFromIndex(index: TradeIdx[], criteria: FilterCriteria)
     const topByVolume = Array.from(b.volumeBySolver.entries()).sort((a,b) => b[1] - a[1]).slice(0,5).map(([solverAddress, volumeUSDC]) => ({ solverAddress, volumeUSDC, wins: (b.winBySolver.get(solverAddress)?.wins ?? 0) }))
     const rankHistogram = Array.from((b.rankCounts || new Map()).entries()).sort((a,b) => a[0]-b[0]).map(([rank, count]) => ({ rank, count }))
     const lossDeltaAvg = (b.lossDeltas && b.lossDeltas.length) ? (b.lossDeltas.reduce((a,c)=>a+c,0) / b.lossDeltas.length) : undefined
+    const lossDeltaBpsAvg = (b.lossBps && b.lossBps.length) ? (b.lossBps.reduce((a,c)=>a+c,0) / b.lossBps.length) : undefined
     return {
       bucket,
       count: b.count,
       volumeUSDC: b.volumeUSDC,
       avgParticipants: b.count ? b.participantsSum / b.count : 0,
       avgProfitPerTradeUSDC: b.count ? b.profitSum / b.count : 0,
+      avgProfitVsMarketPerTradeUSDC: b.count ? b.profitVsMarketSum / b.count : 0,
       topByProfit,
       topByWinRate,
       topByVolume,
       capturedVolumeUSDC: (b as any).capturedVolumeUSDC || 0,
       rankHistogram: criteria.solverIncludes ? rankHistogram : undefined,
       lossDeltaAvg: criteria.solverIncludes ? lossDeltaAvg : undefined,
+      lossDeltaBpsAvg: criteria.solverIncludes ? lossDeltaBpsAvg : undefined,
     }
   })
 
@@ -604,6 +653,7 @@ function computeAggregatesFromIndex(index: TradeIdx[], criteria: FilterCriteria)
     solverStats: Array.from(solverToStats.values()).sort((a,b) => b.wins - a.wins),
     rivalryMatrix: { solvers: topSolvers, matrix },
     avgProfitPerTradeUSDC,
+    avgProfitVsMarketPerTradeUSDC: filtered.length ? (filtered.reduce((s,t)=> s + (t.profitVsMarketUSDCNoFees || 0), 0) / filtered.length) : 0,
     sizeSegments,
     capturedVolumeUSDC: capturedTotal || undefined,
     tradesPreview: filtered.slice(0, 200).map(t => ({

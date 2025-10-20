@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import type { AggregatesResult } from './types'
 import { formatRangeBucketLabel, formatUSDCCompact } from './utils/format'
-import { PieChart } from './components/Charts'
+import { PieChart, BarChart } from './components/Charts'
 import { solverLabel } from './utils/solvers'
 
 type WorkerMsg =
@@ -216,6 +216,7 @@ function App() {
                               <th>% of total</th>
                               <th>Avg participants</th>
                               <th>Avg profit/trade</th>
+                              <th>Avg profit vs market/trade</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -235,6 +236,12 @@ function App() {
                                     <td>{seg.avgParticipants.toFixed(2)}</td>
                                     <td>{(() => {
                                       const avgProfit = seg.avgProfitPerTradeUSDC
+                                      const meanNotional = seg.count ? (seg.volumeUSDC / seg.count) : 0
+                                      const bps = meanNotional > 0 ? (avgProfit / meanNotional) * 10000 : 0
+                                      return `$${formatUSDCCompact(avgProfit)} (${bps.toFixed(1)} bps)`
+                                    })()}</td>
+                                    <td>{(() => {
+                                      const avgProfit = seg.avgProfitVsMarketPerTradeUSDC || 0
                                       const meanNotional = seg.count ? (seg.volumeUSDC / seg.count) : 0
                                       const bps = meanNotional > 0 ? (avgProfit / meanNotional) * 10000 : 0
                                       return `$${formatUSDCCompact(avgProfit)} (${bps.toFixed(1)} bps)`
@@ -324,22 +331,70 @@ function App() {
                                 <tr>
                                   <th>Bucket</th>
                                   <th>Rank distribution</th>
-                                  <th>Avg loss delta (USDC/token)</th>
+                                  <th>Avg loss delta (bps)</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {(aggPrycto.sizeSegments || []).map(seg => (
                                   <tr key={`pry-rank-${seg.bucket}`}>
                                     <td>{formatRangeBucketLabel(seg.bucket)}</td>
-                                    <td>{seg.rankHistogram && seg.rankHistogram.length
-                                      ? seg.rankHistogram.map(r => `${r.rank}:${r.count}`).join(', ')
-                                      : '-'}</td>
-                                    <td>{seg.lossDeltaAvg != null ? seg.lossDeltaAvg.toFixed(6) : '-'}</td>
+                                    <td>{(() => {
+                                      const hist = seg.rankHistogram || []
+                                      if (!hist.length) return '-'
+                                      const buckets: Record<string, number> = { '1': 0, '2': 0, '3': 0, '4': 0, '5+': 0 }
+                                      for (const r of hist) {
+                                        const rank = Number(r.rank)
+                                        if (rank >= 1 && rank <= 4) buckets[String(rank)] += r.count
+                                        else if (rank >= 5) buckets['5+'] += r.count
+                                      }
+                                      const parts: string[] = []
+                                      for (const key of ['1','2','3','4']) {
+                                        if (buckets[key] > 0) parts.push(`${key}:${buckets[key]}`)
+                                      }
+                                      if (buckets['5+'] > 0) parts.push(`5+:${buckets['5+']}`)
+                                      return parts.length ? parts.join(', ') : '-'
+                                    })()}</td>
+                                    <td>{(() => {
+                                      const bps = seg.lossDeltaBpsAvg
+                                      return bps != null ? `${bps.toFixed(2)}` : '-'
+                                    })()}</td>
                                   </tr>
                                 ))}
                               </tbody>
                             </table>
                           </div>
+                          {(() => {
+                            const perBucket = (aggPrycto.sizeSegments || []).map(seg => {
+                              const hist = seg.rankHistogram || []
+                              const grouped: Record<string, number> = { '1': 0, '2': 0, '3': 0, '4': 0, '5+': 0 }
+                              let total = 0
+                              for (const r of hist) {
+                                const rank = Number(r.rank)
+                                const count = Number(r.count) || 0
+                                total += count
+                                if (rank >= 1 && rank <= 4) grouped[String(rank)] += count
+                                else if (rank >= 5) grouped['5+'] += count
+                              }
+                              const data = Object.entries(grouped)
+                                .filter(([, v]) => v > 0)
+                                .map(([k, v]) => ({ rank: k, count: v }))
+                              return { bucket: seg.bucket, total, data }
+                            }).filter(s => s.total > 0)
+                            if (!perBucket.length) return null
+                            return (
+                              <div className="panel" style={{ marginTop: 12 }}>
+                                <h4 style={{ marginTop: 0 }}>Rank outcomes per size</h4>
+                                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                                  {perBucket.map(s => (
+                                    <div key={`pry-rank-chart-${s.bucket}`} style={{ flex: '1 1 220px', minWidth: 220 }}>
+                                      <div className="muted" style={{ marginBottom: 6 }}>{formatRangeBucketLabel(s.bucket)}</div>
+                                      <BarChart data={s.data} xKey="rank" yKey="count" height={160} yLabel="count" />
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )
+                          })()}
                         </div>
                       )}
                       <div className="panel" style={{ marginTop: 12 }}>

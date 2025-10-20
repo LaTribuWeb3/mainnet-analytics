@@ -30,6 +30,9 @@ export interface TradeRecord {
   txFeeWei: string
   competitionSolutions: CompetitionSolution[]
   eventBlockPrices: PriceBounds
+  // Optional market prices per token (USDC per token) provided by API
+  buyUsdcPrice?: number
+  sellUsdcPrice?: number
 }
 
 export interface SolverStats {
@@ -72,6 +75,8 @@ export interface AggregatesResult {
   }>
   // overall average profit per trade (controlled by includeFees in filters)
   avgProfitPerTradeUSDC?: number
+  // overall average profit vs market (block mid) per trade
+  avgProfitVsMarketPerTradeUSDC?: number
   profitStatsWithFees?: {
     count: number
     totalUSDC: number
@@ -115,6 +120,7 @@ export interface AggregatesResult {
     volumeUSDC: number
     avgParticipants: number
     avgProfitPerTradeUSDC: number
+    avgProfitVsMarketPerTradeUSDC: number
     topByProfit: Array<{ solverAddress: string; totalProfitUSDC: number }>
     topByWinRate: Array<{ solverAddress: string; winRate: number; tradesParticipated: number; wins: number }>
     topByVolume: Array<{ solverAddress: string; volumeUSDC: number; wins: number }>
@@ -123,6 +129,7 @@ export interface AggregatesResult {
     // if a solver filter is applied, per-bucket rank distribution and average loss delta vs winner
     rankHistogram?: Array<{ rank: number; count: number }>
     lossDeltaAvg?: number
+    lossDeltaBpsAvg?: number
   }>
   tradesPreview: Array<{
     orderUid: string

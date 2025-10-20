@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { formatUSDCCompact } from '../utils/format'
 
-export function BarChart({ data, xKey, yKey, height = 180, yLabel, labelFormatter }: { data: Array<Record<string, any>>; xKey: string; yKey: string; height?: number; yLabel?: string; labelFormatter?: (s: string) => string }) {
+export function BarChart({ data, xKey, yKey, height = 180, yLabel, labelFormatter }: { data: Array<Record<string, unknown>>; xKey: string; yKey: string; height?: number; yLabel?: string; labelFormatter?: (s: string) => string }) {
   const max = Math.max(1, ...data.map(d => Number(d[yKey]) || 0))
   const barsRef = useRef<HTMLDivElement | null>(null)
   const [containerW, setContainerW] = useState<number>(600)
@@ -17,16 +17,36 @@ export function BarChart({ data, xKey, yKey, height = 180, yLabel, labelFormatte
   }, [])
   const gap = 8
   const barW = Math.max(12, Math.floor((containerW - gap * Math.max(0, data.length - 1)) / Math.max(1, data.length)))
+  const ticks = (() => {
+    const steps = 4
+    return Array.from({ length: steps + 1 }, (_, i) => Math.round((max * i) / steps))
+  })()
   return (
-    <div className="grid grid-cols-[24px_1fr] gap-2">
-      <div className="self-center rotate-180 [writing-mode:vertical-rl] text-xs text-slate-400">{yLabel || 'count'}</div>
-      <div ref={barsRef} className="flex items-end w-full overflow-x-hidden overflow-y-visible" style={{ gap, height }}>
+    <div className="grid grid-cols-[48px_1fr] gap-2">
+      <div className="relative" style={{ height }}>
+        <div className="absolute top-0 left-0 text-xs text-slate-400">{yLabel || 'count'}</div>
+        {ticks.map((t, i) => {
+          const y = Math.round(((height - 24) * (1 - (t / max))))
+          return (
+            <div key={i} className="absolute text-[10px] text-slate-400" style={{ top: y, right: 0, transform: 'translateY(50%)' }}>{t}</div>
+          )
+        })}
+      </div>
+      <div ref={barsRef} className="relative flex items-end w-full overflow-x-hidden overflow-y-visible" style={{ gap, height }}>
+        {/* horizontal grid lines */}
+        {ticks.map((t, i) => {
+          const y = Math.round(((height - 24) * (1 - (t / max))))
+          return (
+            <div key={`grid-${i}`} className="absolute left-0 right-0" style={{ top: y, height: 1, background: 'rgba(148,163,184,0.2)' }} />
+          )
+        })}
         {data.map((d, i) => {
           const v = Number(d[yKey]) || 0
-          const h = Math.round((v / max) * (height - 24))
+          const rawH = (v / max) * (height - 24)
+          const h = v > 0 ? Math.max(1, Math.round(rawH)) : 0
           return (
             <div key={i} title={`${d[xKey]}: ${v}`} className="flex flex-col items-center">
-              <div style={{ width: barW, height: h, background: 'linear-gradient(180deg,#7ab8ff,#4f86e6)' }} className="rounded-md" />
+              <div style={{ width: barW, height: h, background: 'linear-gradient(180deg,#7ab8ff,#4f86e6)', position: 'relative', zIndex: 1 }} className="rounded-md" />
               <div className="mt-1 w-full text-center text-[11px] text-slate-400 whitespace-nowrap overflow-hidden text-ellipsis" style={{ width: barW }}>
                 {labelFormatter ? labelFormatter(String(d[xKey])) : String(d[xKey])}
               </div>
@@ -77,7 +97,7 @@ export function Matrix({ labels, matrix }: { labels: string[]; matrix: number[][
   )
 }
 
-export function PieChart({ data, labelKey, valueKey, size = 220 }: { data: Array<Record<string, any>>; labelKey: string; valueKey: string; size?: number }) {
+export function PieChart({ data, labelKey, valueKey, size = 220 }: { data: Array<Record<string, unknown>>; labelKey: string; valueKey: string; size?: number }) {
   const radius = size / 2
   const total = data.reduce((a, d) => a + (Number(d[valueKey]) || 0), 0)
   const toUpperBoundLabel = (bucket: string): string => {
