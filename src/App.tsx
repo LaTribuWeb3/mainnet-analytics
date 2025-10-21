@@ -476,6 +476,7 @@ function App() {
                           <li>When selling token for USDC (TOKEN → USDC), higher USDC/token is better; quantity = TOKEN sold.</li>
                           <li>When buying token with USDC (USDC → TOKEN), lower USDC/token is better; quantity = TOKEN bought.</li>
                           <li>Fees are ignored for now. This works for BTC/ETH and stable pairs (USDT/USDE) alike.</li>
+                          <li>Profit vs market uses API prices: for USDC → TOKEN, market = buyUsdcPrice (USDC per buyToken); for TOKEN → USDC, market = sellUsdcPrice (USDC per sellToken). We exclude trades without these fields from the vs-market average.</li>
                         </ul>
                       </div>
                       </>
