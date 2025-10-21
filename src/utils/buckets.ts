@@ -24,8 +24,10 @@ export function splitTradesBySellValueUsd(trades: TradeDocument[]): TradeBuckets
   }
 
   for (const trade of trades) {
-    const value = trade.competitionData?.orderSellValueUsd
+    const raw = trade.competitionData?.orderSellValueUsd as number | string | undefined
+    const value = typeof raw === 'string' ? Number(raw) : raw
     if (value === undefined) continue
+    if (!Number.isFinite(value)) continue
 
     if (value >= 0 && value < 1_000) {
       buckets.b0_1k.push(trade)
