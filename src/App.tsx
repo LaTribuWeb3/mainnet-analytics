@@ -77,6 +77,32 @@ export default function App() {
     }
   }, [buckets])
 
+  const premiums = useMemo(() => {
+    if (!buckets) return null
+    const avg = (arr: { rateDiffBps: number | string }[]) => {
+      let sum = 0
+      let count = 0
+      for (const t of arr) {
+        const v = typeof t.rateDiffBps === 'string' ? Number(t.rateDiffBps) : t.rateDiffBps
+        if (Number.isFinite(v)) {
+          sum += v as number
+          count += 1
+        }
+      }
+      return count > 0 ? sum / count : null
+    }
+    return {
+      b0_1k: avg(buckets.b0_1k),
+      b1k_5k: avg(buckets.b1k_5k),
+      b5k_20k: avg(buckets.b5k_20k),
+      b20k_50k: avg(buckets.b20k_50k),
+      b50k_100k: avg(buckets.b50k_100k),
+      b100k_500k: avg(buckets.b100k_500k),
+      b500k_5m: avg(buckets.b500k_5m),
+      b5m_plus: avg(buckets.b5m_plus),
+    }
+  }, [buckets])
+
   const totals = useMemo(() => {
     if (!buckets) return null
     const totalOrders =
@@ -205,6 +231,16 @@ export default function App() {
             <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700 border-b bg-gray-50">Bucket</th>
             <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700 border-b bg-gray-50">Orders</th>
             <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700 border-b bg-gray-50">Volume USD</th>
+            <th
+              className="px-4 py-2 text-right text-sm font-semibold text-gray-700 border-b bg-gray-50"
+              title={
+                'Execution premium vs market (bps) — positive = solver price is lower than market, negative = higher.\n' +
+                'Price slippage vs market (bps), Rate delta to market (bps).\n' +
+                'Definition: bps = (execution_rate − market_rate) / market_rate × 10,000.'
+              }
+            >
+              Execution premium average (bps)
+            </th>
             <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700 border-b bg-gray-50">Share of total volume</th>
           </tr>
         </thead>
@@ -213,48 +249,56 @@ export default function App() {
             <td className="px-4 py-2 border-b">0 - 1k</td>
             <td className="px-4 py-2 border-b text-right">{buckets.b0_1k.length.toLocaleString()}</td>
             <td className="px-4 py-2 border-b text-right">{volumes ? `$${formatUSDCCompact(volumes.b0_1k)}` : '$0'}</td>
+            <td className="px-4 py-2 border-b text-right">{premiums && premiums.b0_1k !== null ? (premiums.b0_1k as number).toFixed(1) : '-'}</td>
             <td className="px-4 py-2 border-b text-right">{totals && volumes && totals.totalVolume > 0 ? `${((volumes.b0_1k / totals.totalVolume) * 100).toFixed(1)}%` : '-'}</td>
           </tr>
           <tr className="odd:bg-white even:bg-gray-50">
             <td className="px-4 py-2 border-b">1k - 5k</td>
             <td className="px-4 py-2 border-b text-right">{buckets.b1k_5k.length.toLocaleString()}</td>
             <td className="px-4 py-2 border-b text-right">{volumes ? `$${formatUSDCCompact(volumes.b1k_5k)}` : '$0'}</td>
+            <td className="px-4 py-2 border-b text-right">{premiums && premiums.b1k_5k !== null ? (premiums.b1k_5k as number).toFixed(1) : '-'}</td>
             <td className="px-4 py-2 border-b text-right">{totals && volumes && totals.totalVolume > 0 ? `${((volumes.b1k_5k / totals.totalVolume) * 100).toFixed(1)}%` : '-'}</td>
           </tr>
           <tr className="odd:bg-white even:bg-gray-50">
             <td className="px-4 py-2 border-b">5k - 20k</td>
             <td className="px-4 py-2 border-b text-right">{buckets.b5k_20k.length.toLocaleString()}</td>
             <td className="px-4 py-2 border-b text-right">{volumes ? `$${formatUSDCCompact(volumes.b5k_20k)}` : '$0'}</td>
+            <td className="px-4 py-2 border-b text-right">{premiums && premiums.b5k_20k !== null ? (premiums.b5k_20k as number).toFixed(1) : '-'}</td>
             <td className="px-4 py-2 border-b text-right">{totals && volumes && totals.totalVolume > 0 ? `${((volumes.b5k_20k / totals.totalVolume) * 100).toFixed(1)}%` : '-'}</td>
           </tr>
           <tr className="odd:bg-white even:bg-gray-50">
             <td className="px-4 py-2 border-b">20k - 50k</td>
             <td className="px-4 py-2 border-b text-right">{buckets.b20k_50k.length.toLocaleString()}</td>
             <td className="px-4 py-2 border-b text-right">{volumes ? `$${formatUSDCCompact(volumes.b20k_50k)}` : '$0'}</td>
+            <td className="px-4 py-2 border-b text-right">{premiums && premiums.b20k_50k !== null ? (premiums.b20k_50k as number).toFixed(1) : '-'}</td>
             <td className="px-4 py-2 border-b text-right">{totals && volumes && totals.totalVolume > 0 ? `${((volumes.b20k_50k / totals.totalVolume) * 100).toFixed(1)}%` : '-'}</td>
           </tr>
           <tr className="odd:bg-white even:bg-gray-50">
             <td className="px-4 py-2 border-b">50k - 100k</td>
             <td className="px-4 py-2 border-b text-right">{buckets.b50k_100k.length.toLocaleString()}</td>
             <td className="px-4 py-2 border-b text-right">{volumes ? `$${formatUSDCCompact(volumes.b50k_100k)}` : '$0'}</td>
+            <td className="px-4 py-2 border-b text-right">{premiums && premiums.b50k_100k !== null ? (premiums.b50k_100k as number).toFixed(1) : '-'}</td>
             <td className="px-4 py-2 border-b text-right">{totals && volumes && totals.totalVolume > 0 ? `${((volumes.b50k_100k / totals.totalVolume) * 100).toFixed(1)}%` : '-'}</td>
           </tr>
           <tr className="odd:bg-white even:bg-gray-50">
             <td className="px-4 py-2 border-b">100k - 500k</td>
             <td className="px-4 py-2 border-b text-right">{buckets.b100k_500k.length.toLocaleString()}</td>
             <td className="px-4 py-2 border-b text-right">{volumes ? `$${formatUSDCCompact(volumes.b100k_500k)}` : '$0'}</td>
+            <td className="px-4 py-2 border-b text-right">{premiums && premiums.b100k_500k !== null ? (premiums.b100k_500k as number).toFixed(1) : '-'}</td>
             <td className="px-4 py-2 border-b text-right">{totals && volumes && totals.totalVolume > 0 ? `${((volumes.b100k_500k / totals.totalVolume) * 100).toFixed(1)}%` : '-'}</td>
           </tr>
           <tr className="odd:bg-white even:bg-gray-50">
             <td className="px-4 py-2 border-b">500k - 5m</td>
             <td className="px-4 py-2 border-b text-right">{buckets.b500k_5m.length.toLocaleString()}</td>
             <td className="px-4 py-2 border-b text-right">{volumes ? `$${formatUSDCCompact(volumes.b500k_5m)}` : '$0'}</td>
+            <td className="px-4 py-2 border-b text-right">{premiums && premiums.b500k_5m !== null ? (premiums.b500k_5m as number).toFixed(1) : '-'}</td>
             <td className="px-4 py-2 border-b text-right">{totals && volumes && totals.totalVolume > 0 ? `${((volumes.b500k_5m / totals.totalVolume) * 100).toFixed(1)}%` : '-'}</td>
           </tr>
           <tr className="odd:bg-white even:bg-gray-50">
             <td className="px-4 py-2 border-b">5m+</td>
             <td className="px-4 py-2 border-b text-right">{buckets.b5m_plus.length.toLocaleString()}</td>
             <td className="px-4 py-2 border-b text-right">{volumes ? `$${formatUSDCCompact(volumes.b5m_plus)}` : '$0'}</td>
+            <td className="px-4 py-2 border-b text-right">{premiums && premiums.b5m_plus !== null ? (premiums.b5m_plus as number).toFixed(1) : '-'}</td>
             <td className="px-4 py-2 border-b text-right">{totals && volumes && totals.totalVolume > 0 ? `${((volumes.b5m_plus / totals.totalVolume) * 100).toFixed(1)}%` : '-'}</td>
           </tr>
         </tbody>
