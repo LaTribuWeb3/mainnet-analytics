@@ -77,6 +77,30 @@ export default function App() {
     }
   }, [buckets])
 
+  const totals = useMemo(() => {
+    if (!buckets) return null
+    const totalOrders =
+      buckets.b0_1k.length +
+      buckets.b1k_5k.length +
+      buckets.b5k_20k.length +
+      buckets.b20k_50k.length +
+      buckets.b50k_100k.length +
+      buckets.b100k_500k.length +
+      buckets.b500k_5m.length +
+      buckets.b5m_plus.length
+    const totalVolume = volumes
+      ? volumes.b0_1k +
+        volumes.b1k_5k +
+        volumes.b5k_20k +
+        volumes.b20k_50k +
+        volumes.b50k_100k +
+        volumes.b100k_500k +
+        volumes.b500k_5m +
+        volumes.b5m_plus
+      : 0
+    return { totalOrders, totalVolume }
+  }, [buckets, volumes])
+
   useEffect(() => {
     const abortController = new AbortController()
 
@@ -151,7 +175,6 @@ export default function App() {
     </div>
   ) : (
     <div>
-      <h1>Hello world</h1>
       <div>
         <label htmlFor="timespan">Time span: </label>
         <select
@@ -163,6 +186,17 @@ export default function App() {
           <option value="last7">Last 7 days</option>
           <option value="last30">Last 30 days</option>
         </select>
+      </div>
+
+      <div style={{ display: 'flex', gap: '1rem' }}>
+        <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.75rem 1rem' }}>
+          <div>Total valid orders</div>
+          <div>{totals ? totals.totalOrders.toLocaleString() : 0}</div>
+        </div>
+        <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.75rem 1rem' }}>
+          <div>Total volume (USD)</div>
+          <div>{totals ? `$${formatUSDCCompact(totals.totalVolume)}` : '$0'}</div>
+        </div>
       </div>
 
       <table>
