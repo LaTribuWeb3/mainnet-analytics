@@ -5,6 +5,15 @@ import { splitTradesBySellValueUsd } from './utils/buckets'
 import type { TradeBuckets } from './utils/buckets'
 
 const DATA_URL = 'https://prod.mainnet.cowswap.la-tribu.xyz/db/USDC-WETH'
+const CACHE_KEY = 'usdc-weth-trades-cache-v1'
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000
+
+type CacheEntry = { data: TradesApiResponse; cachedAt: number }
+function isCacheEntry(value: unknown): value is CacheEntry {
+  if (value === null || typeof value !== 'object') return false
+  const obj = value as Record<string, unknown>
+  return 'data' in obj && 'cachedAt' in obj && typeof obj.cachedAt === 'number'
+}
 
 export default function App() {
   const [buckets, setBuckets] = useState<TradeBuckets | null>(null)
@@ -13,29 +22,69 @@ export default function App() {
   useEffect(() => {
     const abortController = new AbortController()
 
+    function processResponse(json: TradesApiResponse) {
+      const missingCounter: Record<string, number> = {}
+      const filtered = json.documents.filter((doc) => {
+        if (isTradeDocument(doc)) return true
+        const missing = getMissingTradeFields(doc)
+        for (const key of missing) missingCounter[key] = (missingCounter[key] ?? 0) + 1
+        return false
+      })
+      const newBuckets = splitTradesBySellValueUsd(filtered)
+      setBuckets(newBuckets)
+      setMissingCounts(missingCounter)
+    }
+
     async function fetchData() {
       try {
         const response = await fetch(DATA_URL, { signal: abortController.signal })
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
         const json: TradesApiResponse = await response.json()
         console.log('JSON:', json)
-        const missingCounter: Record<string, number> = {}
-        const filtered = json.documents.filter((doc) => {
-          if (isTradeDocument(doc)) return true
-          const missing = getMissingTradeFields(doc)
-          for (const key of missing) missingCounter[key] = (missingCounter[key] ?? 0) + 1
-          return false
-        })
-        console.log('Filtered:', filtered)
-        const newBuckets = splitTradesBySellValueUsd(filtered)
-        setBuckets(newBuckets)
-        setMissingCounts(missingCounter)
-        console.log('Buckets:', newBuckets)
+        // Always render, even if caching fails
+        processResponse(json)
+        try {
+          localStorage.setItem(
+            CACHE_KEY,
+            JSON.stringify({ data: json, cachedAt: Date.now() })
+          )
+        } catch (cacheError) {
+          console.warn('Failed to cache response (likely quota exceeded):', cacheError)
+        }
       } catch (error) {
         if ((error as { name?: string } | null)?.name !== 'AbortError') {
           console.error('Failed to fetch data:', error)
         }
       }
+    }
+
+    try {
+      const cached = localStorage.getItem(CACHE_KEY)
+      if (cached) {
+        const parsedUnknown: unknown = JSON.parse(cached)
+        if (isCacheEntry(parsedUnknown)) {
+          const entry = parsedUnknown
+          const isFresh = Date.now() - entry.cachedAt < CACHE_TTL_MS
+          if (isFresh) {
+            console.log('Loaded fresh cache')
+            processResponse(entry.data)
+          } else {
+            console.log('Loaded stale cache, will refresh')
+            processResponse(entry.data)
+            fetchData()
+          }
+          return () => abortController.abort()
+        } else {
+          // Backward compatibility for older cache value
+          const legacy = parsedUnknown as TradesApiResponse
+          console.log('Loaded legacy cache, will refresh')
+          processResponse(legacy)
+          fetchData()
+          return () => abortController.abort()
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load cache:', e)
     }
 
     fetchData()

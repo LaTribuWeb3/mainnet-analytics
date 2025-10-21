@@ -24,7 +24,7 @@ export function splitTradesBySellValueUsd(trades: TradeDocument[]): TradeBuckets
   }
 
   for (const trade of trades) {
-    const raw = trade.competitionData?.orderSellValueUsd as number | string | undefined
+    const raw = trade.orderSellValueUsd as number | string | undefined
     const value = typeof raw === 'string' ? Number(raw) : raw
     if (value === undefined) continue
     if (!Number.isFinite(value)) continue

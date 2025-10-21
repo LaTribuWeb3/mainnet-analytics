@@ -1,11 +1,12 @@
+export interface BidDatum {
+  buyAmount: string
+  sellAmount: string
+  solverAddress: string
+  winner: boolean
+}
+
 export interface CompetitionData {
-  buyUsdcPrice: number
-  sellUsdcPrice: number
-  feeInUSD: number
-  orderBuyValueUsd: number
-  orderSellValueUsd: number
-  rateDiffBps: number
-  usdPnLExcludingFee: number
+  bidData: BidDatum[]
 }
 
 export interface TradeDocument {
@@ -20,6 +21,13 @@ export interface TradeDocument {
   sellAmount: string
   sellToken: string
   transactionFee: string
+  buyUsdcPrice: number
+  sellUsdcPrice: number
+  feeInUSD: number
+  orderBuyValueUsd: number
+  orderSellValueUsd: number
+  rateDiffBps: number
+  usdPnLExcludingFee: number
   competitionData?: CompetitionData
 }
 

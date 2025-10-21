@@ -33,13 +33,17 @@ export function isTradeDocument(value: unknown): value is TradeDocument {
     hasValue(v.owner) &&
     hasValue(v.sellAmount) &&
     hasValue(v.sellToken) &&
-    hasValue(v.transactionFee)
+    hasValue(v.transactionFee) &&
+    hasValue(v.buyUsdcPrice) &&
+    hasValue(v.sellUsdcPrice) &&
+    hasValue(v.feeInUSD) &&
+    hasValue(v.orderBuyValueUsd) &&
+    hasValue(v.orderSellValueUsd) &&
+    hasValue(v.rateDiffBps) &&
+    hasValue(v.usdPnLExcludingFee)
 
   if (!baseFieldsPresent) return false
-
-  const comp = (v as { competitionData?: unknown }).competitionData
-  if (comp === undefined || comp === null) return true
-  return isCompetitionData(comp)
+  return true
 }
 
 export const REQUIRED_TRADE_FIELDS = [
@@ -54,9 +58,6 @@ export const REQUIRED_TRADE_FIELDS = [
   'sellAmount',
   'sellToken',
   'transactionFee',
-] as const
-
-export const REQUIRED_COMPETITION_FIELDS = [
   'buyUsdcPrice',
   'sellUsdcPrice',
   'feeInUSD',
@@ -65,6 +66,8 @@ export const REQUIRED_COMPETITION_FIELDS = [
   'rateDiffBps',
   'usdPnLExcludingFee',
 ] as const
+
+export const REQUIRED_COMPETITION_FIELDS = ['bidData'] as const
 
 export function getMissingTradeFields(value: unknown): string[] {
   if (value === null || typeof value !== 'object') {
