@@ -242,7 +242,7 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
         }
       }
 
-      // profit estimation (USDC) vs market (prefer API usdc prices, fallback to block mid)
+      // profit estimation (USDC) vs market (requires API usdc prices)
       if (winnerPrice != null) {
         const sellTokenLc = tr.sellToken.toLowerCase()
         const buyTokenLc = tr.buyToken.toLowerCase()
@@ -256,7 +256,6 @@ ctx.onmessage = async (ev: MessageEvent<MsgIn>) => {
         } else if (buyTokenLc === TOKENS.USDC && sellTokenLc !== TOKENS.USDC) {
           marketMid = tr.sellUsdcPrice ?? null
         }
-        if (marketMid == null) marketMid = selectBenchmark(tr.eventBlockPrices as any, 'mid')
         if (tokenQty > 0 && marketMid != null) {
           const improvementVsMarket = higherIsBetter ? (winnerPrice - marketMid) : (marketMid - winnerPrice)
           const noFeesMarket = Math.max(0, improvementVsMarket * tokenQty)
@@ -539,6 +538,7 @@ function computeAggregatesFromIndex(index: TradeIdx[], criteria: FilterCriteria)
     participantsSum: number
     profitSum: number
     profitVsMarketSum: number
+    vsMarketCount: number
     profitBySolver: Map<string, number>
     winBySolver: Map<string, { wins: number; participated: number }>
     volumeBySolver: Map<string, number>
@@ -552,6 +552,7 @@ function computeAggregatesFromIndex(index: TradeIdx[], criteria: FilterCriteria)
     participantsSum: 0,
     profitSum: 0,
     profitVsMarketSum: 0,
+    vsMarketCount: 0,
     profitBySolver: new Map(),
     winBySolver: new Map(),
     volumeBySolver: new Map(),
@@ -572,8 +573,10 @@ function computeAggregatesFromIndex(index: TradeIdx[], criteria: FilterCriteria)
     b.participantsSum += t.participants
     const prof = t.profitUSDCNoFees
     b.profitSum += prof
-    const profMkt = t.profitVsMarketUSDCNoFees || 0
-    b.profitVsMarketSum += profMkt
+    if (typeof t.profitVsMarketUSDCNoFees === 'number') {
+      b.profitVsMarketSum += t.profitVsMarketUSDCNoFees
+      b.vsMarketCount += 1
+    }
     // profit and volume by solver (winner)
     if (t.winner) {
       b.profitBySolver.set(t.winner, (b.profitBySolver.get(t.winner) ?? 0) + prof)
@@ -624,13 +627,16 @@ function computeAggregatesFromIndex(index: TradeIdx[], criteria: FilterCriteria)
     const rankHistogram = Array.from((b.rankCounts || new Map()).entries()).sort((a,b) => a[0]-b[0]).map(([rank, count]) => ({ rank, count }))
     const lossDeltaAvg = (b.lossDeltas && b.lossDeltas.length) ? (b.lossDeltas.reduce((a,c)=>a+c,0) / b.lossDeltas.length) : undefined
     const lossDeltaBpsAvg = (b.lossBps && b.lossBps.length) ? (b.lossBps.reduce((a,c)=>a+c,0) / b.lossBps.length) : undefined
+    // Average vs market: exclude trades lacking API price (they contributed 0 to profitVsMarketSum and were counted in count).
+    // To avoid dilution, recompute the denominator as the number of trades with a defined profitVsMarket value.
+    const denomVsMkt = b.vsMarketCount
     return {
       bucket,
       count: b.count,
       volumeUSDC: b.volumeUSDC,
       avgParticipants: b.count ? b.participantsSum / b.count : 0,
       avgProfitPerTradeUSDC: b.count ? b.profitSum / b.count : 0,
-      avgProfitVsMarketPerTradeUSDC: b.count ? b.profitVsMarketSum / b.count : 0,
+      avgProfitVsMarketPerTradeUSDC: denomVsMkt ? b.profitVsMarketSum / denomVsMkt : 0,
       topByProfit,
       topByWinRate,
       topByVolume,
@@ -653,7 +659,13 @@ function computeAggregatesFromIndex(index: TradeIdx[], criteria: FilterCriteria)
     solverStats: Array.from(solverToStats.values()).sort((a,b) => b.wins - a.wins),
     rivalryMatrix: { solvers: topSolvers, matrix },
     avgProfitPerTradeUSDC,
-    avgProfitVsMarketPerTradeUSDC: filtered.length ? (filtered.reduce((s,t)=> s + (t.profitVsMarketUSDCNoFees || 0), 0) / filtered.length) : 0,
+    avgProfitVsMarketPerTradeUSDC: (() => {
+      let sum = 0, n = 0
+      for (const t of filtered) {
+        if (typeof t.profitVsMarketUSDCNoFees === 'number') { sum += t.profitVsMarketUSDCNoFees; n += 1 }
+      }
+      return n ? sum / n : 0
+    })(),
     sizeSegments,
     capturedVolumeUSDC: capturedTotal || undefined,
     tradesPreview: filtered.slice(0, 200).map(t => ({
