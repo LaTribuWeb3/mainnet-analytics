@@ -254,6 +254,7 @@ export default function App() {
         </div>
       </div>
 
+      <h2 style={{ marginTop: '1rem', marginBottom: '0.5rem', fontWeight: 600 }}>Overall analytics</h2>
       <table className="min-w-full" style={{ borderCollapse: 'collapse' }}>
         <thead>
           <tr>
@@ -347,6 +348,20 @@ export default function App() {
             <td className="px-4 py-2 border-b text-right">{profits && profits.b5m_plus.ex !== null ? `$${formatUSDCCompact(profits.b5m_plus.ex as number)}` : '-'}</td>
             <td className="px-4 py-2 border-b text-right">{profits && profits.b5m_plus.inc !== null ? `$${formatUSDCCompact(profits.b5m_plus.inc as number)}` : '-'}</td>
             <td className="px-4 py-2 border-b text-right">{premiums && premiums.b5m_plus !== null ? (premiums.b5m_plus as number).toFixed(1) : '-'}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2 style={{ marginTop: '1.5rem', marginBottom: '0.5rem', fontWeight: 600 }}>Prycto analytics</h2>
+      <table className="min-w-full" style={{ borderCollapse: 'collapse' }}>
+        <thead>
+          <tr>
+            <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700 border-b bg-gray-50">Prycto analytics (placeholder)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr className="odd:bg-white even:bg-gray-50">
+            <td className="px-4 py-3 text-gray-600">We will define the columns and data here together.</td>
           </tr>
         </tbody>
       </table>
