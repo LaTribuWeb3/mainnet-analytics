@@ -29,6 +29,7 @@ export interface TradeDocument {
   rateDiffBps: number
   usdPnLExcludingFee: number
   competitionData?: CompetitionData
+  pryctoApiPrice?: number
 }
 
 export interface TradesApiResponse {
