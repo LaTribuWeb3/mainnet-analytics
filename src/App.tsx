@@ -5,7 +5,15 @@ import { getMissingTradeFields, isTradeDocument } from './utils/guards'
 import { splitTradesBySellValueUsd } from './utils/buckets'
 import type { TradeBuckets } from './utils/buckets'
 import { computeSellTokenPricesUSDC } from './utils/pryctoDelta'
-import { TOKENS, computePriceUSDCPerToken, higherPriceIsBetterUSDCPerToken } from './utils/price'
+import {
+  avgDeltaWethPrice,
+  avgDeltaVsExecutionPct,
+  avgDeltaExecVsMarketPct,
+  avgPryctoPremiumBps,
+  avgRateDiffBps,
+  avgRateDiffBpsDirectionAdjusted,
+  avgProfitPair,
+} from './utils/avg'
 
 const DATA_URL = 'https://prod.mainnet.cowswap.la-tribu.xyz/db/USDC-WETH'
 const CACHE_KEY = 'usdc-weth-trades-cache-v1'
@@ -21,126 +29,12 @@ function isCacheEntry(value: unknown): value is CacheEntry {
 
 export default function App() {
   const [buckets, setBuckets] = useState<TradeBuckets | null>(null)
-  const [pryctoBuckets, setPryctoBuckets] = useState<TradeBuckets | null>(null)
   const [pryctoApiBuckets, setPryctoApiBuckets] = useState<TradeBuckets | null>(null)
   const [missingCounts, setMissingCounts] = useState<Record<string, number>>({})
   const [rawResponse, setRawResponse] = useState<TradesApiResponse | null>(null)
   const [timeSpan, setTimeSpan] = useState<'yesterday' | 'last7' | 'last30'>('yesterday')
   const showMissing = false
   // Removed avgMarketWethPrice and avgPryctoWethPrice since columns were hidden
-
-  function avgDeltaWethPrice(docs: { buyToken: string; sellToken: string; buyUsdcPrice: number; sellUsdcPrice: number; pryctoApiPrice?: number }[]): number | null {
-    const WETH = TOKENS.WETH
-    let sumPct = 0
-    let count = 0
-    for (const d of docs) {
-      const isWethBuy = (d.buyToken || '').toLowerCase() === WETH
-      const isWethSell = (d.sellToken || '').toLowerCase() === WETH
-      if (!isWethBuy && !isWethSell) continue
-      const market = isWethBuy ? d.buyUsdcPrice : d.sellUsdcPrice
-      const prycto = (d as { pryctoApiPrice?: number }).pryctoApiPrice
-      if (!Number.isFinite(market) || !Number.isFinite(prycto) || market === 0) continue
-      const rawPct = (((prycto as number) - (market as number)) / (market as number)) * 100
-      const dir = higherPriceIsBetterUSDCPerToken(d.sellToken, d.buyToken)
-      if (dir === null) continue
-      const adjustedPct = rawPct * (dir ? 1 : -1)
-      sumPct += adjustedPct
-      count += 1
-    }
-    if (count === 0) return null
-    return sumPct / count
-  }
-
-  function avgDeltaVsExecutionPct(docs: { buyToken: string; sellToken: string; sellAmount: string; buyAmount: string; pryctoApiPrice?: number }[]): number | null {
-    let sumPct = 0
-    let count = 0
-    for (const d of docs) {
-      const exec = computePriceUSDCPerToken(d.sellToken, d.buyToken, d.sellAmount, d.buyAmount)
-      const prycto = (d as { pryctoApiPrice?: number }).pryctoApiPrice
-      if (!Number.isFinite(exec) || !Number.isFinite(prycto) || (exec as number) === 0) continue
-      const rawPct = (((prycto as number) - (exec as number)) / (exec as number)) * 100
-      const dir = higherPriceIsBetterUSDCPerToken(d.sellToken, d.buyToken)
-      if (dir === null) continue
-      const adjustedPct = rawPct * (dir ? 1 : -1)
-      sumPct += adjustedPct
-      count += 1
-    }
-    if (count === 0) return null
-    return sumPct / count
-  }
-
-  function avgDeltaWinnerVsMarketPct(docs: { buyToken: string; sellToken: string; buyUsdcPrice: number; sellUsdcPrice: number; competitionData?: { bidData?: { winner?: boolean; sellAmount: string; buyAmount: string }[] } }[]): number | null {
-    let sumPct = 0
-    let count = 0
-    for (const d of docs) {
-      const bids = d.competitionData?.bidData || []
-      const winner = bids.find((b) => b?.winner === true)
-      if (!winner) continue
-      const bidPrice = computePriceUSDCPerToken(d.sellToken, d.buyToken, winner.sellAmount, winner.buyAmount)
-      if (!Number.isFinite(bidPrice) || (bidPrice as number) === 0) continue
-      // Market USDC per non-USDC token
-      const isSellUSDC = (d.sellToken || '').toLowerCase() === TOKENS.USDC
-      const isBuyUSDC = (d.buyToken || '').toLowerCase() === TOKENS.USDC
-      let market: number | null = null
-      if (isSellUSDC) market = d.buyUsdcPrice
-      else if (isBuyUSDC) market = d.sellUsdcPrice
-      if (!Number.isFinite(market) || (market as number) === 0) continue
-      const rawPct = (((bidPrice as number) - (market as number)) / (market as number)) * 100
-      const dir = higherPriceIsBetterUSDCPerToken(d.sellToken, d.buyToken)
-      if (dir === null) continue
-      const adjustedPct = rawPct * (dir ? 1 : -1)
-      sumPct += adjustedPct
-      count += 1
-    }
-    if (count === 0) return null
-    return sumPct / count
-  }
-
-  function avgDeltaExecVsMarketPct(docs: { buyToken: string; sellToken: string; sellAmount: string; buyAmount: string; buyUsdcPrice: number; sellUsdcPrice: number }[]): number | null {
-    let sumPct = 0
-    let count = 0
-    for (const d of docs) {
-      const exec = computePriceUSDCPerToken(d.sellToken, d.buyToken, d.sellAmount, d.buyAmount)
-      if (!Number.isFinite(exec) || (exec as number) === 0) continue
-      const isSellUSDC = (d.sellToken || '').toLowerCase() === TOKENS.USDC
-      const isBuyUSDC = (d.buyToken || '').toLowerCase() === TOKENS.USDC
-      let market: number | null = null
-      if (isSellUSDC) market = d.buyUsdcPrice
-      else if (isBuyUSDC) market = d.sellUsdcPrice
-      if (!Number.isFinite(market) || (market as number) === 0) continue
-      const rawPct = (((exec as number) - (market as number)) / (market as number)) * 100
-      const dir = higherPriceIsBetterUSDCPerToken(d.sellToken, d.buyToken)
-      if (dir === null) continue
-      const adjustedPct = rawPct * (dir ? 1 : -1)
-      sumPct += adjustedPct
-      count += 1
-    }
-    if (count === 0) return null
-    return sumPct / count
-  }
-
-  function avgPryctoPremiumBps(
-    docs: { buyToken: string; sellToken: string; buyUsdcPrice: number; sellUsdcPrice: number; pryctoApiPrice?: number }[]
-  ): number | null {
-    const WETH = TOKENS.WETH
-    let sumBps = 0
-    let count = 0
-    for (const d of docs) {
-      const isWethBuy = (d.buyToken || '').toLowerCase() === WETH
-      const isWethSell = (d.sellToken || '').toLowerCase() === WETH
-      if (!isWethBuy && !isWethSell) continue
-      const market = isWethBuy ? d.buyUsdcPrice : d.sellUsdcPrice
-      const prycto = (d as { pryctoApiPrice?: number }).pryctoApiPrice
-      const dir = higherPriceIsBetterUSDCPerToken(d.sellToken, d.buyToken)
-      if (!Number.isFinite(market) || !Number.isFinite(prycto) || market === 0 || dir === null) continue
-      const rawPct = (((prycto as number) - (market as number)) / (market as number)) * 100
-      const adjustedPct = rawPct * (dir ? 1 : -1)
-      sumBps += adjustedPct * 100 // 1% = 100 bps
-      count += 1
-    }
-    if (count === 0) return null
-    return sumBps / count
-  }
 
   const processResponse = useCallback(
     (json: TradesApiResponse, span: 'yesterday' | 'last7' | 'last30') => {
@@ -246,8 +140,8 @@ export default function App() {
         const pctStr = ((offCount / totalCount) * 100).toFixed(2)
         console.log(`Prycto prices > 1% off from market: ${pctStr}% (${offCount} of ${totalCount})`)
       }
-      const newPryctoBuckets = splitTradesBySellValueUsd(pryctoDocs)
-      setPryctoBuckets(newPryctoBuckets)
+      // const newPryctoBuckets = splitTradesBySellValueUsd(pryctoDocs)
+      // setPryctoBuckets(newPryctoBuckets)
       // Prycto API docs: only those with a non-null/numeric pryctoApiPrice
       const pryctoApiDocs = valid.filter((doc) => Number.isFinite((doc as { pryctoApiPrice?: number }).pryctoApiPrice))
       const newPryctoApiBuckets = splitTradesBySellValueUsd(pryctoApiDocs)
@@ -278,56 +172,29 @@ export default function App() {
 
   const premiums = useMemo(() => {
     if (!buckets) return null
-    const avg = (arr: { rateDiffBps: number | string }[]) => {
-      let sum = 0
-      let count = 0
-      for (const t of arr) {
-        const v = typeof t.rateDiffBps === 'string' ? Number(t.rateDiffBps) : t.rateDiffBps
-        if (Number.isFinite(v)) {
-          sum += v as number
-          count += 1
-        }
-      }
-      return count > 0 ? sum / count : null
-    }
     return {
-      b0_1k: avg(buckets.b0_1k),
-      b1k_5k: avg(buckets.b1k_5k),
-      b5k_20k: avg(buckets.b5k_20k),
-      b20k_50k: avg(buckets.b20k_50k),
-      b50k_100k: avg(buckets.b50k_100k),
-      b100k_500k: avg(buckets.b100k_500k),
-      b500k_5m: avg(buckets.b500k_5m),
-      b5m_plus: avg(buckets.b5m_plus),
+      b0_1k: avgRateDiffBps(buckets.b0_1k),
+      b1k_5k: avgRateDiffBps(buckets.b1k_5k),
+      b5k_20k: avgRateDiffBps(buckets.b5k_20k),
+      b20k_50k: avgRateDiffBps(buckets.b20k_50k),
+      b50k_100k: avgRateDiffBps(buckets.b50k_100k),
+      b100k_500k: avgRateDiffBps(buckets.b100k_500k),
+      b500k_5m: avgRateDiffBps(buckets.b500k_5m),
+      b5m_plus: avgRateDiffBps(buckets.b5m_plus),
     }
   }, [buckets])
 
   const profits = useMemo(() => {
     if (!buckets) return null
-    const avgPair = (arr: { usdPnLExcludingFee: number | string; feeInUSD: number | string }[]) => {
-      let sumEx = 0
-      let sumInc = 0
-      let count = 0
-      for (const t of arr) {
-        const pnlEx = typeof t.usdPnLExcludingFee === 'string' ? Number(t.usdPnLExcludingFee) : t.usdPnLExcludingFee
-        const fee = typeof t.feeInUSD === 'string' ? Number(t.feeInUSD) : t.feeInUSD
-        if (Number.isFinite(pnlEx) && Number.isFinite(fee)) {
-          sumEx += pnlEx as number
-          sumInc += (pnlEx as number) - (fee as number)
-          count += 1
-        }
-      }
-      return count > 0 ? { ex: sumEx / count, inc: sumInc / count } : { ex: null, inc: null }
-    }
     return {
-      b0_1k: avgPair(buckets.b0_1k),
-      b1k_5k: avgPair(buckets.b1k_5k),
-      b5k_20k: avgPair(buckets.b5k_20k),
-      b20k_50k: avgPair(buckets.b20k_50k),
-      b50k_100k: avgPair(buckets.b50k_100k),
-      b100k_500k: avgPair(buckets.b100k_500k),
-      b500k_5m: avgPair(buckets.b500k_5m),
-      b5m_plus: avgPair(buckets.b5m_plus),
+      b0_1k: avgProfitPair(buckets.b0_1k),
+      b1k_5k: avgProfitPair(buckets.b1k_5k),
+      b5k_20k: avgProfitPair(buckets.b5k_20k),
+      b20k_50k: avgProfitPair(buckets.b20k_50k),
+      b50k_100k: avgProfitPair(buckets.b50k_100k),
+      b100k_500k: avgProfitPair(buckets.b100k_500k),
+      b500k_5m: avgProfitPair(buckets.b500k_5m),
+      b5m_plus: avgProfitPair(buckets.b5m_plus),
     }
   }, [buckets])
 
@@ -376,58 +243,29 @@ export default function App() {
 
   const pryctoApiPremiums = useMemo(() => {
     if (!pryctoApiBuckets) return null
-    const avg = (arr: { rateDiffBps: number | string; sellToken: string; buyToken: string }[]) => {
-      let sum = 0
-      let count = 0
-      for (const t of arr) {
-        const v = typeof t.rateDiffBps === 'string' ? Number(t.rateDiffBps) : t.rateDiffBps
-        const dir = higherPriceIsBetterUSDCPerToken(t.sellToken, t.buyToken)
-        if (Number.isFinite(v) && dir !== null) {
-          const adjusted = (v as number) * (dir ? 1 : -1)
-          sum += adjusted
-          count += 1
-        }
-      }
-      return count > 0 ? sum / count : null
-    }
     return {
-      b0_1k: avg(pryctoApiBuckets.b0_1k),
-      b1k_5k: avg(pryctoApiBuckets.b1k_5k),
-      b5k_20k: avg(pryctoApiBuckets.b5k_20k),
-      b20k_50k: avg(pryctoApiBuckets.b20k_50k),
-      b50k_100k: avg(pryctoApiBuckets.b50k_100k),
-      b100k_500k: avg(pryctoApiBuckets.b100k_500k),
-      b500k_5m: avg(pryctoApiBuckets.b500k_5m),
-      b5m_plus: avg(pryctoApiBuckets.b5m_plus),
+      b0_1k: avgRateDiffBpsDirectionAdjusted(pryctoApiBuckets.b0_1k),
+      b1k_5k: avgRateDiffBpsDirectionAdjusted(pryctoApiBuckets.b1k_5k),
+      b5k_20k: avgRateDiffBpsDirectionAdjusted(pryctoApiBuckets.b5k_20k),
+      b20k_50k: avgRateDiffBpsDirectionAdjusted(pryctoApiBuckets.b20k_50k),
+      b50k_100k: avgRateDiffBpsDirectionAdjusted(pryctoApiBuckets.b50k_100k),
+      b100k_500k: avgRateDiffBpsDirectionAdjusted(pryctoApiBuckets.b100k_500k),
+      b500k_5m: avgRateDiffBpsDirectionAdjusted(pryctoApiBuckets.b500k_5m),
+      b5m_plus: avgRateDiffBpsDirectionAdjusted(pryctoApiBuckets.b5m_plus),
     }
   }, [pryctoApiBuckets])
 
   const pryctoApiProfits = useMemo(() => {
     if (!pryctoApiBuckets) return null
-    const avgPair = (arr: { usdPnLExcludingFee: number | string; feeInUSD: number | string }[]) => {
-      let sumEx = 0
-      let sumInc = 0
-      let count = 0
-      for (const t of arr) {
-        const pnlEx = typeof t.usdPnLExcludingFee === 'string' ? Number(t.usdPnLExcludingFee) : t.usdPnLExcludingFee
-        const fee = typeof t.feeInUSD === 'string' ? Number(t.feeInUSD) : t.feeInUSD
-        if (Number.isFinite(pnlEx) && Number.isFinite(fee)) {
-          sumEx += pnlEx as number
-          sumInc += (pnlEx as number) - (fee as number)
-          count += 1
-        }
-      }
-      return count > 0 ? { ex: sumEx / count, inc: sumInc / count } : { ex: null, inc: null }
-    }
     return {
-      b0_1k: avgPair(pryctoApiBuckets.b0_1k),
-      b1k_5k: avgPair(pryctoApiBuckets.b1k_5k),
-      b5k_20k: avgPair(pryctoApiBuckets.b5k_20k),
-      b20k_50k: avgPair(pryctoApiBuckets.b20k_50k),
-      b50k_100k: avgPair(pryctoApiBuckets.b50k_100k),
-      b100k_500k: avgPair(pryctoApiBuckets.b100k_500k),
-      b500k_5m: avgPair(pryctoApiBuckets.b500k_5m),
-      b5m_plus: avgPair(pryctoApiBuckets.b5m_plus),
+      b0_1k: avgProfitPair(pryctoApiBuckets.b0_1k),
+      b1k_5k: avgProfitPair(pryctoApiBuckets.b1k_5k),
+      b5k_20k: avgProfitPair(pryctoApiBuckets.b5k_20k),
+      b20k_50k: avgProfitPair(pryctoApiBuckets.b20k_50k),
+      b50k_100k: avgProfitPair(pryctoApiBuckets.b50k_100k),
+      b100k_500k: avgProfitPair(pryctoApiBuckets.b100k_500k),
+      b500k_5m: avgProfitPair(pryctoApiBuckets.b500k_5m),
+      b5m_plus: avgProfitPair(pryctoApiBuckets.b5m_plus),
     }
   }, [pryctoApiBuckets])
 
