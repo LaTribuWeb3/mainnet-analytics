@@ -10,7 +10,7 @@
  * - Percent delta: ((A − B) / B) × 100; null if denominator is 0 or values are not finite.
  * - Basis points (bps): 1% = 100 bps.
  */
-import { TOKENS, computePriceUSDCPerToken, higherPriceIsBetterUSDCPerToken } from './price'
+import { TOKENS, computePriceUSDCPerToken, higherPriceIsBetterUSDCPerToken, normalizeAmount } from './price'
 
 /**
  * Average Prycto vs Market delta (%) for WETH-side trades.
@@ -140,6 +140,119 @@ export function avgDeltaExecVsMarketPct(
   }
   if (count === 0) return null
   return sumPct / count
+}
+
+/**
+ * Average Execution premium (bps) vs Market.
+ *
+ * Uses the same inputs and direction-adjustment as `avgDeltaExecVsMarketPct`,
+ * but returns basis points: ((exec − market) / market) × 10,000, adjusted so
+ * positive consistently means "better for the trader".
+ */
+export function avgExecPremiumBps(
+  docs: { buyToken: string; sellToken: string; sellAmount: string; buyAmount: string; buyUsdcPrice: number; sellUsdcPrice: number }[]
+): number | null {
+  let sumBps = 0
+  let count = 0
+  for (const d of docs) {
+    const exec = computePriceUSDCPerToken(d.sellToken, d.buyToken, d.sellAmount, d.buyAmount)
+    if (!Number.isFinite(exec) || (exec as number) === 0) continue
+    const isSellUSDC = (d.sellToken || '').toLowerCase() === TOKENS.USDC
+    const isBuyUSDC = (d.buyToken || '').toLowerCase() === TOKENS.USDC
+    let market: number | null = null
+    if (isSellUSDC) market = d.buyUsdcPrice
+    else if (isBuyUSDC) market = d.sellUsdcPrice
+    if (!Number.isFinite(market) || (market as number) === 0) continue
+    const rawBps = (((exec as number) - (market as number)) / (market as number)) * 10000
+    const dir = higherPriceIsBetterUSDCPerToken(d.sellToken, d.buyToken)
+    if (dir === null) continue
+    const adjustedBps = rawBps * (dir ? 1 : -1)
+    sumBps += adjustedBps
+    count += 1
+  }
+  if (count === 0) return null
+  return sumBps / count
+}
+
+/**
+ * Average Prycto bid premium (bps) vs Market for docs where Prycto placed a bid.
+ *
+ * For each document, locate a Prycto bid (by address), compute its implied
+ * USDC-per-token price using bid amounts, compare to the market price relevant
+ * to the USDC side, apply direction-adjustment so positive means better for the
+ * trader, and average the result in basis points.
+ */
+export function avgPryctoBidPremiumBps(
+  docs: {
+    buyToken: string
+    sellToken: string
+    buyUsdcPrice: number
+    sellUsdcPrice: number
+    competitionData?: { bidData?: { sellAmount: string; buyAmount: string; solverAddress?: string }[] }
+  }[],
+  pryctoAddress: string
+): number | null {
+  const addrLc = (pryctoAddress || '').toLowerCase()
+  let sumBps = 0
+  let count = 0
+  for (const d of docs) {
+    const bids = d.competitionData?.bidData || []
+    const pBid = bids.find((b) => (b?.solverAddress || '').toLowerCase() === addrLc)
+    if (!pBid) continue
+    const pryctoPrice = computePriceUSDCPerToken(d.sellToken, d.buyToken, pBid.sellAmount, pBid.buyAmount)
+    if (!Number.isFinite(pryctoPrice) || (pryctoPrice as number) === 0) continue
+    const isSellUSDC = (d.sellToken || '').toLowerCase() === TOKENS.USDC
+    const isBuyUSDC = (d.buyToken || '').toLowerCase() === TOKENS.USDC
+    let market: number | null = null
+    if (isSellUSDC) market = d.buyUsdcPrice
+    else if (isBuyUSDC) market = d.sellUsdcPrice
+    if (!Number.isFinite(market) || (market as number) === 0) continue
+    const rawBps = (((pryctoPrice as number) - (market as number)) / (market as number)) * 10000
+    const dir = higherPriceIsBetterUSDCPerToken(d.sellToken, d.buyToken)
+    if (dir === null) continue
+    const adjustedBps = rawBps * (dir ? 1 : -1)
+    sumBps += adjustedBps
+    count += 1
+  }
+  if (count === 0) return null
+  return sumBps / count
+}
+
+/**
+ * Average of Prycto bid buyAmount over winning bid buyAmount (normalized units).
+ *
+ * Only considers documents where a winner exists and Prycto also bid. Skips
+ * entries with non-finite amounts or zero denominators. Returns null if no
+ * eligible entries.
+ */
+export function avgPryctoBidBuyOverWinnerBuy(
+  docs: {
+    buyToken: string
+    competitionData?: { bidData?: { winner?: boolean; buyAmount: string; solverAddress?: string }[] }
+  }[],
+  pryctoAddress: string
+): number | null {
+  const addrLc = (pryctoAddress || '').toLowerCase()
+  const ratios: number[] = []
+  let sum = 0
+  let count = 0
+  for (const d of docs) {
+    const bids = d.competitionData?.bidData || []
+    const winner = bids.find((b) => b?.winner === true)
+    if (!winner) continue
+    const pryctoBid = bids.find((b) => (b?.solverAddress || '').toLowerCase() === addrLc)
+    if (!pryctoBid) continue
+    const pryctoBuy = normalizeAmount(pryctoBid.buyAmount, d.buyToken)
+    const winnerBuy = normalizeAmount(winner.buyAmount, d.buyToken)
+    if (!Number.isFinite(pryctoBuy) || !Number.isFinite(winnerBuy) || winnerBuy === 0) continue
+    const ratio = (pryctoBuy as number) / (winnerBuy as number)
+    ratios.push(ratio)
+    sum += ratio
+    count += 1
+  }
+  if (ratios.length > 0) console.log('Prycto buyAmount / Winner buyAmount ratios (normalized):', ratios)
+  if (count === 0) return null
+  return sum / count
 }
 
 /**

@@ -21,3 +21,11 @@ export function formatRangeBucketLabel(label: string): string {
   return label
 }
 
+// Truncate a number to fixed decimal places without rounding
+export function truncateToDecimals(value: number, decimals: number): string {
+  if (!Number.isFinite(value)) return '-'
+  const factor = 10 ** decimals
+  const truncated = Math.trunc(value * factor) / factor
+  return truncated.toFixed(decimals)
+}
+
