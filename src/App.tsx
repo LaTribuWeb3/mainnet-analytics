@@ -38,6 +38,7 @@ export default function App() {
   // Non-winning Prycto bidder dataset
   const [pryctoNonWinBuckets, setPryctoNonWinBuckets] = useState<TradeBuckets | null>(null)
   // Removed avgMarketWethPrice and avgPryctoWethPrice since columns were hidden
+  console.log('pryctoApiBuckets', pryctoApiBuckets)
 
   const processResponse = useCallback(
     (json: TradesApiResponse, span: 'yesterday' | 'last7' | 'last30') => {
@@ -46,19 +47,17 @@ export default function App() {
         Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) / 1000
       )
       const day = 24 * 60 * 60
-      // For 'yesterday' display, use the day before yesterday under the hood
       const startSec =
         span === 'yesterday'
-          ? endSec - 2 * day
+          ? endSec - day
           : span === 'last7'
           ? endSec - 7 * day
           : endSec - 30 * day
-      const endBound = span === 'yesterday' ? endSec - day : endSec
       const inRange = json.documents.filter((doc) => {
         const tsRaw = (doc as unknown as { blockTimestamp?: number | string | null }).blockTimestamp
         const ts = typeof tsRaw === 'string' ? Number(tsRaw) : tsRaw
         if (!Number.isFinite(ts)) return false
-        return (ts as number) >= startSec && (ts as number) < endBound
+        return (ts as number) >= startSec && (ts as number) < endSec
       })
 
       const missingCounter: Record<string, number> = {}
