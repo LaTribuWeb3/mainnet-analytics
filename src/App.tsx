@@ -5,6 +5,7 @@ import { getMissingTradeFields, isTradeDocument } from './utils/guards'
 import { splitTradesBySellValueUsd } from './utils/buckets'
 import type { TradeBuckets } from './utils/buckets'
 import { computeSellTokenPricesUSDC } from './utils/pryctoDelta'
+import { toDay } from './utils/price'
 import {
   avgDeltaWethPrice,
   avgDeltaVsExecutionPct,
@@ -37,6 +38,13 @@ export default function App() {
   const showMissing = false
   // Non-winning Prycto bidder dataset
   const [pryctoNonWinBuckets, setPryctoNonWinBuckets] = useState<TradeBuckets | null>(null)
+  // Prycto win-rate time series (per day)
+  const [pryctoWinSeries, setPryctoWinSeries] = useState<{ day: string; wins: number; total: number; rate: number }[] | null>(null)
+  // Hover state for win-rate chart
+  const [winHover, setWinHover] = useState<{ index: number; x: number; y: number } | null>(null)
+  // Prycto daily won volume (USD) time series
+  const [pryctoWinVolSeries, setPryctoWinVolSeries] = useState<{ day: string; volume: number }[] | null>(null)
+  const [winVolHover, setWinVolHover] = useState<{ index: number; x: number; y: number } | null>(null)
   // Removed avgMarketWethPrice and avgPryctoWethPrice since columns were hidden
   console.log('pryctoApiBuckets', pryctoApiBuckets)
 
@@ -153,6 +161,50 @@ export default function App() {
         const pctStr = ((offCount / totalCount) * 100).toFixed(2)
         console.log(`Prycto prices > 1% off from market: ${pctStr}% (${offCount} of ${totalCount})`)
       }
+      // Build Prycto win-rate by day over the last 20 days (independent of selected timespan)
+      const last20StartSec = endSec - 20 * day
+      const dayToCounts: Record<string, { wins: number; total: number }> = {}
+      for (const doc of json.documents) {
+        const tsRaw = (doc as unknown as { blockTimestamp?: number | string | null }).blockTimestamp
+        const ts = typeof tsRaw === 'string' ? Number(tsRaw) : tsRaw
+        if (!Number.isFinite(ts)) continue
+        if ((ts as number) < last20StartSec || (ts as number) >= endSec) continue
+        const bids = (doc as { competitionData?: { bidData?: { solverAddress?: string; winner?: boolean }[] } }).competitionData?.bidData || []
+        const pryctoParticipated = bids.some((b) => (b?.solverAddress || '').toLowerCase() === PRYCTO_ADDRESS)
+        if (!pryctoParticipated) continue
+        const winner = bids.find((b) => b?.winner === true)
+        const isWin = !!winner && (winner?.solverAddress || '').toLowerCase() === PRYCTO_ADDRESS
+        const dayKey = toDay(ts as number)
+        if (!dayToCounts[dayKey]) dayToCounts[dayKey] = { wins: 0, total: 0 }
+        dayToCounts[dayKey].total += 1
+        if (isWin) dayToCounts[dayKey].wins += 1
+      }
+      const series = Object.entries(dayToCounts)
+        .map(([day, { wins, total }]) => ({ day, wins, total, rate: total > 0 ? wins / total : 0 }))
+        .sort((a, b) => (a.day < b.day ? -1 : 1))
+      setPryctoWinSeries(series)
+
+      // Build Prycto daily won volume (USD) over last 20 days (winner must be Prycto)
+      const dayToVol: Record<string, number> = {}
+      for (const doc of json.documents) {
+        const tsRaw = (doc as unknown as { blockTimestamp?: number | string | null }).blockTimestamp
+        const ts = typeof tsRaw === 'string' ? Number(tsRaw) : tsRaw
+        if (!Number.isFinite(ts)) continue
+        if ((ts as number) < last20StartSec || (ts as number) >= endSec) continue
+        const bids = (doc as { competitionData?: { bidData?: { solverAddress?: string; winner?: boolean }[] } }).competitionData?.bidData || []
+        const winner = bids.find((b) => b?.winner === true)
+        const isWin = !!winner && (winner?.solverAddress || '').toLowerCase() === PRYCTO_ADDRESS
+        if (!isWin) continue
+        const volRaw = (doc as { orderSellValueUsd?: number | string }).orderSellValueUsd
+        const vol = typeof volRaw === 'string' ? Number(volRaw) : volRaw
+        if (!Number.isFinite(vol)) continue
+        const dayKey = toDay(ts as number)
+        dayToVol[dayKey] = (dayToVol[dayKey] ?? 0) + (vol as number)
+      }
+      const volSeries = Object.entries(dayToVol)
+        .map(([day, volume]) => ({ day, volume }))
+        .sort((a, b) => (a.day < b.day ? -1 : 1))
+      setPryctoWinVolSeries(volSeries)
       // const newPryctoBuckets = splitTradesBySellValueUsd(pryctoDocs)
       // setPryctoBuckets(newPryctoBuckets)
       // Prycto API docs: only those with a non-null/numeric pryctoApiPrice
@@ -601,6 +653,272 @@ export default function App() {
         </tbody>
       </table> */}
 
+      {pryctoWinSeries && pryctoWinSeries.length > 0 && (
+        <>
+          <h2 style={{ marginTop: '1.5rem', marginBottom: '0.5rem', fontWeight: 600 }}>Prycto win rate over time</h2>
+          <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.75rem 1rem' }}>
+            {(() => {
+              const w = 1000
+              const h = 320
+              const pad = 32
+              const series = pryctoWinSeries
+              const n = series.length
+              const xFor = (i: number) => pad + (n === 1 ? 0 : (i * (w - 2 * pad)) / (n - 1))
+              const yMax = 0.6
+              const yFor = (rate: number) => {
+                const clamped = Math.max(0, Math.min(yMax, rate))
+                const norm = clamped / yMax
+                return pad + (1 - norm) * (h - 2 * pad)
+              }
+              // 7-day moving average using aggregated wins/total in window
+              const maWindow = 7
+              const maRates = series.map((_, i) => {
+                const start = Math.max(0, i - (maWindow - 1))
+                let wins = 0
+                let total = 0
+                for (let j = start; j <= i; j++) {
+                  wins += series[j].wins
+                  total += series[j].total
+                }
+                return total > 0 ? wins / total : 0
+              })
+              const pointsRaw = series.map((s, i) => `${xFor(i)},${yFor(s.rate)}`).join(' ')
+              const pointsMA = maRates.map((r, i) => `${xFor(i)},${yFor(r)}`).join(' ')
+              const legendW = 160
+              const legendH = 30
+              const legendX = (w - legendW) / 2
+              const legendY = pad
+              return (
+                <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`}>
+                  {/* Axes */}
+                  <line x1={pad} y1={h - pad} x2={w - pad} y2={h - pad} stroke="#e5e7eb" />
+                  <line x1={pad} y1={pad} x2={pad} y2={h - pad} stroke="#e5e7eb" />
+                  {/* Y ticks */}
+                  {[0, 0.3, 0.6].map((t) => (
+                    <g key={t}>
+                      <line x1={pad - 4} y1={yFor(t)} x2={w - pad} y2={yFor(t)} stroke="#f3f4f6" />
+                      <text x={8} y={yFor(t) + 4} fontSize={12} fill="#6b7280">{`${Math.round(t * 100)}%`}</text>
+                    </g>
+                  ))}
+                  {/* X grid and labels (sparse) */}
+                  {(() => {
+                    const tickCount = Math.min(6, n)
+                    const idxs = new Set(Array.from({ length: tickCount }, (_, k) => Math.round((k * (n - 1)) / (tickCount - 1 || 1))))
+                    return (
+                      <g>
+                        {series.map((s, i) => (
+                          idxs.has(i) ? (
+                            <g key={`x-${s.day}`}>
+                              <line x1={xFor(i)} y1={pad} x2={xFor(i)} y2={h - pad} stroke="#f3f4f6" />
+                              <text x={xFor(i)} y={h - pad + 22} fontSize={10} fill="#6b7280" textAnchor="end" transform={`rotate(-45 ${xFor(i)},${h - pad + 22})`}>
+                                {s.day}
+                              </text>
+                            </g>
+                          ) : null
+                        ))}
+                      </g>
+                    )
+                  })()}
+                  {/* Raw rate line (light) */}
+                  <polyline fill="none" stroke="#93c5fd" strokeWidth={1} points={pointsRaw} />
+                  {/* Moving average line (7-day) */}
+                  <polyline fill="none" stroke="#2563eb" strokeWidth={2} points={pointsMA} />
+                  {/* MA dots */}
+                  {maRates.map((r, i) => (
+                    <circle key={`ma-${series[i].day}`} cx={xFor(i)} cy={yFor(r)} r={3} fill="#2563eb" />
+                  ))}
+                  {/* Hover targets for daily raw points */}
+                  {series.map((s, i) => (
+                    <circle
+                      key={`raw-hit-${s.day}`}
+                      cx={xFor(i)}
+                      cy={yFor(s.rate)}
+                      r={8}
+                      fill="#000"
+                      opacity={0.001}
+                      onMouseEnter={(e) => setWinHover({ index: i, x: (e.nativeEvent as unknown as MouseEvent).offsetX ?? xFor(i), y: (e.nativeEvent as unknown as MouseEvent).offsetY ?? yFor(s.rate) })}
+                      onMouseMove={(e) => setWinHover({ index: i, x: (e.nativeEvent as unknown as MouseEvent).offsetX ?? xFor(i), y: (e.nativeEvent as unknown as MouseEvent).offsetY ?? yFor(s.rate) })}
+                      onMouseLeave={() => setWinHover(null)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                  ))}
+                  {/* Hover targets for MA points */}
+                  {maRates.map((r, i) => (
+                    <circle
+                      key={`ma-hit-${series[i].day}`}
+                      cx={xFor(i)}
+                      cy={yFor(r)}
+                      r={8}
+                      fill="#000"
+                      opacity={0.001}
+                      onMouseEnter={(e) => setWinHover({ index: i, x: (e.nativeEvent as unknown as MouseEvent).offsetX ?? xFor(i), y: (e.nativeEvent as unknown as MouseEvent).offsetY ?? yFor(r) })}
+                      onMouseMove={(e) => setWinHover({ index: i, x: (e.nativeEvent as unknown as MouseEvent).offsetX ?? xFor(i), y: (e.nativeEvent as unknown as MouseEvent).offsetY ?? yFor(r) })}
+                      onMouseLeave={() => setWinHover(null)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                  ))}
+                  {/* Tooltip */}
+                  {winHover && (() => {
+                    const i = winHover.index
+                    const d = series[i]
+                    const rRaw = d.rate
+                    const rMA = maRates[i]
+                    const label = `${d.day}\nDaily: ${(rRaw * 100).toFixed(1)}%  •  7d MA: ${(rMA * 100).toFixed(1)}%`
+                    const boxW = 200
+                    const lines = label.split('\n')
+                    const lineH = 16
+                    const boxH = lineH * lines.length + 10
+                    const px = Math.min(Math.max(pad, xFor(i) + 10), w - pad - boxW)
+                    const py = Math.min(Math.max(pad, yFor(rRaw) - boxH - 10), h - pad - boxH)
+                    return (
+                      <g>
+                        <rect x={px} y={py} width={boxW} height={boxH} rx={6} ry={6} fill="#111827" opacity={0.9} />
+                        {lines.map((ln, idx) => (
+                          <text key={idx} x={px + 8} y={py + 8 + lineH * (idx + 1) - 6} fontSize={12} fill="#f9fafb">{ln}</text>
+                        ))}
+                      </g>
+                    )
+                  })()}
+                  {/* Legend (centered) */}
+                  <rect x={legendX} y={legendY} width={legendW} height={legendH} rx={6} ry={6} fill="#ffffff" stroke="#e5e7eb" />
+                  <line x1={legendX + 10} y1={legendY + 11} x2={legendX + 30} y2={legendY + 11} stroke="#93c5fd" strokeWidth={2} />
+                  <text x={legendX + 35} y={legendY + 14} fontSize={12} fill="#6b7280">Daily rate</text>
+                  <line x1={legendX + 10} y1={legendY + 23} x2={legendX + 30} y2={legendY + 23} stroke="#2563eb" strokeWidth={2} />
+                  <text x={legendX + 35} y={legendY + 26} fontSize={12} fill="#6b7280">7-day MA</text>
+                </svg>
+              )
+            })()}
+            <div style={{ marginTop: 8, color: '#6b7280', fontSize: 12 }}>
+              Win rate = wins / participations where Prycto bid is present; per UTC day. Y-axis capped at 60%. Moving average aggregates wins and total over a 7-day window.
+            </div>
+          </div>
+        </>
+      )}
+
+      {pryctoWinVolSeries && pryctoWinVolSeries.length > 0 && (
+        <>
+          <h2 style={{ marginTop: '1.5rem', marginBottom: '0.5rem', fontWeight: 600 }}>Prycto won volume over time</h2>
+          <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.75rem 1rem' }}>
+            {(() => {
+              const w = 1000
+              const h = 320
+              const pad = 32
+              const series = pryctoWinVolSeries
+              const n = series.length
+              const xFor = (i: number) => pad + (n === 1 ? 0 : (i * (w - 2 * pad)) / (n - 1))
+              const maxVol = Math.max(...series.map((s) => s.volume), 1)
+              const yFor = (vol: number) => {
+                const clamped = Math.max(0, Math.min(maxVol, vol))
+                const norm = maxVol === 0 ? 0 : clamped / maxVol
+                return pad + (1 - norm) * (h - 2 * pad)
+              }
+              // 7-day moving average for volume (simple mean)
+              const maWindow = 7
+              const maVol = series.map((_, i) => {
+                const start = Math.max(0, i - (maWindow - 1))
+                let sum = 0
+                let cnt = 0
+                for (let j = start; j <= i; j++) {
+                  sum += series[j].volume
+                  cnt += 1
+                }
+                return cnt > 0 ? sum / cnt : 0
+              })
+              const pointsRaw = series.map((s, i) => `${xFor(i)},${yFor(s.volume)}`).join(' ')
+              const pointsMA = maVol.map((v, i) => `${xFor(i)},${yFor(v)}`).join(' ')
+              const legendW = 180
+              const legendH = 30
+              const legendX = (w - legendW) / 2
+              const legendY = pad
+              return (
+                <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`}>
+                  {/* Axes */}
+                  <line x1={pad} y1={h - pad} x2={w - pad} y2={h - pad} stroke="#e5e7eb" />
+                  <line x1={pad} y1={pad} x2={pad} y2={h - pad} stroke="#e5e7eb" />
+                  {/* Y ticks (auto based on max) */}
+                  {[0, 0.25, 0.5, 0.75, 1].map((t) => (
+                    <g key={t}>
+                      <line x1={pad - 4} y1={yFor(maxVol * t)} x2={w - pad} y2={yFor(maxVol * t)} stroke="#f3f4f6" />
+                      <text x={8} y={yFor(maxVol * t) + 4} fontSize={12} fill="#6b7280">{`$${formatUSDCCompact(maxVol * t)}`}</text>
+                    </g>
+                  ))}
+                  {/* X grid and labels (sparse) */}
+                  {(() => {
+                    const tickCount = Math.min(6, n)
+                    const idxs = new Set(Array.from({ length: tickCount }, (_, k) => Math.round((k * (n - 1)) / (tickCount - 1 || 1))))
+                    return (
+                      <g>
+                        {series.map((s, i) => (
+                          idxs.has(i) ? (
+                            <g key={`xv-${s.day}`}>
+                              <line x1={xFor(i)} y1={pad} x2={xFor(i)} y2={h - pad} stroke="#f3f4f6" />
+                              <text x={xFor(i)} y={h - pad + 22} fontSize={10} fill="#6b7280" textAnchor="end" transform={`rotate(-45 ${xFor(i)},${h - pad + 22})`}>
+                                {s.day}
+                              </text>
+                            </g>
+                          ) : null
+                        ))}
+                      </g>
+                    )
+                  })()}
+                  {/* Raw line (light) */}
+                  <polyline fill="none" stroke="#93c5fd" strokeWidth={1} points={pointsRaw} />
+                  {/* Moving average line (7-day) */}
+                  <polyline fill="none" stroke="#2563eb" strokeWidth={2} points={pointsMA} />
+                  {/* Hover targets */}
+                  {series.map((s, i) => (
+                    <circle
+                      key={`vol-hit-${s.day}`}
+                      cx={xFor(i)}
+                      cy={yFor(s.volume)}
+                      r={8}
+                      fill="#000"
+                      opacity={0.001}
+                      onMouseEnter={(e) => setWinVolHover({ index: i, x: (e.nativeEvent as unknown as MouseEvent).offsetX ?? xFor(i), y: (e.nativeEvent as unknown as MouseEvent).offsetY ?? yFor(s.volume) })}
+                      onMouseMove={(e) => setWinVolHover({ index: i, x: (e.nativeEvent as unknown as MouseEvent).offsetX ?? xFor(i), y: (e.nativeEvent as unknown as MouseEvent).offsetY ?? yFor(s.volume) })}
+                      onMouseLeave={() => setWinVolHover(null)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                  ))}
+                  {maVol.map((v, i) => (
+                    <circle key={`vol-ma-${series[i].day}`} cx={xFor(i)} cy={yFor(v)} r={3} fill="#2563eb" />
+                  ))}
+                  {/* Tooltip */}
+                  {winVolHover && (() => {
+                    const i = winVolHover.index
+                    const d = series[i]
+                    const mv = maVol[i]
+                    const label = `${d.day}\nVolume: $${formatUSDCCompact(d.volume)}  •  7d MA: $${formatUSDCCompact(mv)}`
+                    const boxW = 220
+                    const lines = label.split('\n')
+                    const lineH = 16
+                    const boxH = lineH * lines.length + 10
+                    const px = Math.min(Math.max(pad, xFor(i) + 10), w - pad - boxW)
+                    const py = Math.min(Math.max(pad, yFor(d.volume) - boxH - 10), h - pad - boxH)
+                    return (
+                      <g>
+                        <rect x={px} y={py} width={boxW} height={boxH} rx={6} ry={6} fill="#111827" opacity={0.9} />
+                        {lines.map((ln, idx) => (
+                          <text key={idx} x={px + 8} y={py + 8 + lineH * (idx + 1) - 6} fontSize={12} fill="#f9fafb">{ln}</text>
+                        ))}
+                      </g>
+                    )
+                  })()}
+                  {/* Legend (centered) */}
+                  <rect x={legendX} y={legendY} width={legendW} height={legendH} rx={6} ry={6} fill="#ffffff" stroke="#e5e7eb" />
+                  <line x1={legendX + 10} y1={legendY + 11} x2={legendX + 30} y2={legendY + 11} stroke="#93c5fd" strokeWidth={2} />
+                  <text x={legendX + 35} y={legendY + 14} fontSize={12} fill="#6b7280">Daily volume</text>
+                  <line x1={legendX + 10} y1={legendY + 23} x2={legendX + 30} y2={legendY + 23} stroke="#2563eb" strokeWidth={2} />
+                  <text x={legendX + 35} y={legendY + 26} fontSize={12} fill="#6b7280">7-day MA</text>
+                </svg>
+              )
+            })()}
+            <div style={{ marginTop: 8, color: '#6b7280', fontSize: 12 }}>
+              Daily won volume: sum of `orderSellValueUsd` for orders where Prycto is the winner; per UTC day. 7-day MA is a simple average.
+            </div>
+          </div>
+        </>
+      )}
       <h2 style={{ marginTop: '1.5rem', marginBottom: '0.5rem', fontWeight: 600 }}>Prycto Price API analytics</h2>
       <table className="min-w-full" style={{ borderCollapse: 'collapse' }}>
         <thead>
