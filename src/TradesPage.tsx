@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { BidDatum, TradeDocument, TradesApiResponse } from './types'
 import { normalizeAmount, toDay } from './utils/price'
 import { formatCompactTruncate } from './utils/format'
+import { solverLabel } from './utils/solvers'
 
 const API_URL = '/api/trades'
 
@@ -68,6 +69,7 @@ export default function TradesPage() {
   const [endDate, setEndDate] = useState<string | null>(null)
   const [sellTokenFilter, setSellTokenFilter] = useState<string>('')
   const [buyTokenFilter, setBuyTokenFilter] = useState<string>('')
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     const abort = new AbortController()
@@ -192,6 +194,10 @@ export default function TradesPage() {
     return `$${formatCompactTruncate(vol, 2)}`
   }
 
+  function toggleExpanded(id: string) {
+    setExpanded((prev) => ({ ...prev, [id]: !prev[id] }))
+  }
+
   if (loading) {
     return (
       <div style={{ maxWidth: 960, margin: '0 auto', padding: '1rem' }}>
@@ -278,22 +284,93 @@ export default function TradesPage() {
         </thead>
         <tbody>
           {filteredDocs.slice(0, 50).map((d) => {
+            const isOpen = !!expanded[d._id]
             return (
-              <tr key={d._id} className="odd:bg-white even:bg-gray-50">
-                <td className="px-4 py-2 border-b" style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  <a href={cowOrderUrl(d.orderUid)} target="_blank" rel="noreferrer" title={d.orderUid}>
-                    {truncate6(d.orderUid)}...
-                  </a>
-                </td>
-                <td className="px-4 py-2 border-b" style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  <a href={etherscanTxUrl(d.txHash)} target="_blank" rel="noreferrer" title={d.txHash}>
-                    {truncate6(d.txHash)}...
-                  </a>
-                </td>
-                <td className="px-4 py-2 border-b" title={d.sellToken}>{formatTokenAmount(d.sellAmount, d.sellToken)}</td>
-                <td className="px-4 py-2 border-b" title={d.buyToken}>{formatTokenAmount(d.buyAmount, d.buyToken)}</td>
-                <td className="px-4 py-2 border-b text-right">{formatUsdVolume(d)}</td>
-              </tr>
+              <>
+                <tr
+                  key={d._id}
+                  className="odd:bg-white even:bg-gray-50"
+                  onClick={() => toggleExpanded(d._id)}
+                  style={{ cursor: 'pointer' }}
+                  aria-expanded={isOpen}
+               >
+                  <td className="px-4 py-2 border-b" style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <a
+                      href={cowOrderUrl(d.orderUid)}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={d.orderUid}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {truncate6(d.orderUid)}...
+                    </a>
+                  </td>
+                  <td className="px-4 py-2 border-b" style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <a
+                      href={etherscanTxUrl(d.txHash)}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={d.txHash}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {truncate6(d.txHash)}...
+                    </a>
+                  </td>
+                  <td className="px-4 py-2 border-b" title={d.sellToken}>{formatTokenAmount(d.sellAmount, d.sellToken)}</td>
+                  <td className="px-4 py-2 border-b" title={d.buyToken}>{formatTokenAmount(d.buyAmount, d.buyToken)}</td>
+                  <td className="px-4 py-2 border-b text-right">{formatUsdVolume(d)}</td>
+                </tr>
+                {isOpen && (
+                  <tr>
+                    <td className="px-4 py-2 border-b bg-gray-50" colSpan={5}>
+                      {d.competitionData?.bidData && d.competitionData.bidData.length > 0 ? (
+                        <table className="min-w-full" style={{ borderCollapse: 'collapse' }}>
+                          <thead>
+                            <tr>
+                              <th className="px-2 py-1 text-left text-xs font-semibold text-gray-700 border-b">Solver</th>
+                              <th className="px-2 py-1 text-left text-xs font-semibold text-gray-700 border-b">Sell bid</th>
+                              <th className="px-2 py-1 text-left text-xs font-semibold text-gray-700 border-b">Buy bid</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(() => {
+                              const bids = d.competitionData?.bidData || []
+                              const winnerBid = bids.find((x) => x.winner)
+                              const rest = bids.filter((x) => !x.winner)
+                              const sortedRest = rest
+                                .slice()
+                                .sort((a, b) => {
+                                  const ab = Number(normalizeAmount(a.buyAmount, d.buyToken))
+                                  const bb = Number(normalizeAmount(b.buyAmount, d.buyToken))
+                                  return (bb || 0) - (ab || 0)
+                                })
+                              const sorted = winnerBid ? [winnerBid, ...sortedRest] : sortedRest
+                              return sorted.map((b, idx) => {
+                                const isWinner = !!b.winner
+                                return (
+                                  <tr
+                                    key={`${d._id}-bid-${idx}`}
+                                    className="odd:bg-white even:bg-gray-50"
+                                    style={{ backgroundColor: isWinner ? '#ecfdf5' : undefined, fontWeight: isWinner ? 600 : undefined }}
+                                  >
+                                    <td className="px-2 py-1 border-b" style={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis' }} title={b.solverAddress}>
+                                      {solverLabel(b.solverAddress)}
+                                    </td>
+                                    <td className="px-2 py-1 border-b">{formatTokenAmount(b.sellAmount, d.sellToken)}</td>
+                                    <td className="px-2 py-1 border-b">{formatTokenAmount(b.buyAmount, d.buyToken)}</td>
+                                  </tr>
+                                )
+                              })
+                            })()}
+                          </tbody>
+                        </table>
+                      ) : (
+                        <div style={{ color: '#6b7280' }}>No competition data</div>
+                      )}
+                    </td>
+                  </tr>
+                )}
+              </>
             )
           })}
         </tbody>
