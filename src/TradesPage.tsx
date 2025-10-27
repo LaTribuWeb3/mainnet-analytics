@@ -245,7 +245,7 @@ export default function TradesPage() {
       </div>
 
       {/* Filters */}
-      <div style={{ marginTop: '1rem', marginBottom: '0.5rem', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{ marginTop: '1rem', marginBottom: '0.25rem', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
         <label htmlFor="start-date">From</label>
         <input
           id="start-date"
@@ -264,7 +264,6 @@ export default function TradesPage() {
           max={minMaxDays.maxDay}
           onChange={(e) => setEndDate(e.target.value || null)}
         />
-        <div style={{ width: 24 }} />
         <label htmlFor="sell-token">Sell token</label>
         <select id="sell-token" value={sellTokenFilter} onChange={(e) => setSellTokenFilter(e.target.value)}>
           <option value="">Any</option>
@@ -283,7 +282,9 @@ export default function TradesPage() {
           <option value="0x4c9edd5852cd905f086c759e8383e09bff1e68b3">USDE</option>
           <option value="0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2">WETH</option>
         </select>
-        <div style={{ width: 24 }} />
+      </div>
+
+      <div style={{ marginTop: '0.25rem', marginBottom: '0.5rem', display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
         <label>
           <input
             type="checkbox"
