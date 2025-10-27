@@ -82,8 +82,8 @@ export default function TradesPage() {
       try {
         setLoading(true)
         setError(null)
-        // Build query with token addresses if both are provided
-        const apiBase = import.meta.env.DEV ? '/api' : 'https://cowswap-data-api.la-tribu.xyz'
+        // Build query with token addresses if both are provided (CORS enabled at origin)
+        const apiBase = 'https://cowswap-data-api.la-tribu.xyz'
         const url = new URL(apiBase + API_PATH, window.location.origin)
         const a = sellTokenFilter.trim()
         const b = buyTokenFilter.trim()

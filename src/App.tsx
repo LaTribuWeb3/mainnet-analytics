@@ -481,7 +481,7 @@ export default function App() {
 
     async function fetchData() {
       try {
-        const apiBase = import.meta.env.DEV ? '/api' : 'https://cowswap-data-api.la-tribu.xyz'
+        const apiBase = 'https://cowswap-data-api.la-tribu.xyz'
         const url = new URL(apiBase + '/trades', window.location.origin)
         url.searchParams.set('tokenA', WETH)
         url.searchParams.set('tokenB', USDC)
