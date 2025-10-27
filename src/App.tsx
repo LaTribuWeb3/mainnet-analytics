@@ -16,7 +16,8 @@ import {
   avgPryctoBidBuyOverWinnerBuy,
 } from './utils/avg'
 
-const DATA_URL = '/api/trades?tokenA=0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2&tokenB=0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48'
+const WETH = '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2'
+const USDC = '0xa0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'
 const CACHE_KEY = 'usdc-weth-trades-cache-v1'
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000
 const PRYCTO_ADDRESS = '0xa97851357e99082762c972f794b2a29e629511a7'
@@ -480,8 +481,18 @@ export default function App() {
 
     async function fetchData() {
       try {
-        const response = await fetch(DATA_URL, { signal: abortController.signal })
+        const apiBase = import.meta.env.DEV ? '/api' : 'https://cowswap-data-api.la-tribu.xyz'
+        const url = new URL(apiBase + '/trades', window.location.origin)
+        url.searchParams.set('tokenA', WETH)
+        url.searchParams.set('tokenB', USDC)
+
+        const response = await fetch(url.toString(), { signal: abortController.signal })
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        const contentType = response.headers.get('content-type') || ''
+        if (!contentType.includes('application/json')) {
+          const txt = await response.text()
+          throw new Error(`Unexpected response content-type: ${contentType}. Body: ${txt.slice(0, 200)}`)
+        }
         const raw = (await response.json()) as ApiResponse | TradesApiResponse
         const items = Array.isArray((raw as ApiResponse).items)
           ? (raw as ApiResponse).items
@@ -505,6 +516,8 @@ export default function App() {
       } catch (error) {
         if ((error as { name?: string } | null)?.name !== 'AbortError') {
           console.error('Failed to fetch data:', error)
+          // End loading state with empty dataset so UI doesn't hang
+          setRawResponse({ documents: [] })
         }
       }
     }
