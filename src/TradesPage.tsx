@@ -70,6 +70,10 @@ export default function TradesPage() {
   const [sellTokenFilter, setSellTokenFilter] = useState<string>('')
   const [buyTokenFilter, setBuyTokenFilter] = useState<string>('')
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [onlyPryctoParticipated, setOnlyPryctoParticipated] = useState<boolean>(false)
+  const [onlyPryctoWinner, setOnlyPryctoWinner] = useState<boolean>(false)
+
+  const PRYCTO_ADDRESS = '0xa97851357e99082762c972f794b2a29e629511a7'
 
   useEffect(() => {
     const abort = new AbortController()
@@ -139,9 +143,19 @@ export default function TradesPage() {
       if (!(Number.isFinite(ts) && (ts as number) >= startSec && (ts as number) < endExclusive)) return false
       if (sellTokenFilter && d.sellToken.toLowerCase() !== sellTokenFilter.toLowerCase()) return false
       if (buyTokenFilter && d.buyToken.toLowerCase() !== buyTokenFilter.toLowerCase()) return false
+      if (onlyPryctoParticipated || onlyPryctoWinner) {
+        const bids = (d.competitionData?.bidData || [])
+        const participated = bids.some((b) => (b.solverAddress || '').toLowerCase() === PRYCTO_ADDRESS)
+        if (onlyPryctoParticipated && !participated) return false
+        if (onlyPryctoWinner) {
+          const winner = bids.find((b) => b.winner)
+          const isWin = !!winner && (winner?.solverAddress || '').toLowerCase() === PRYCTO_ADDRESS
+          if (!isWin) return false
+        }
+      }
       return true
     })
-  }, [documents, startDate, endDate, sellTokenFilter, buyTokenFilter])
+  }, [documents, startDate, endDate, sellTokenFilter, buyTokenFilter, onlyPryctoParticipated, onlyPryctoWinner])
 
   const minMaxDays = useMemo(() => {
     if (documents.length === 0) return { minDay: '', maxDay: '' }
@@ -269,6 +283,23 @@ export default function TradesPage() {
           <option value="0x4c9edd5852cd905f086c759e8383e09bff1e68b3">USDE</option>
           <option value="0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2">WETH</option>
         </select>
+        <div style={{ width: 24 }} />
+        <label>
+          <input
+            type="checkbox"
+            checked={onlyPryctoParticipated}
+            onChange={(e) => setOnlyPryctoParticipated(e.target.checked)}
+          />
+          <span style={{ marginLeft: 6 }}>Prycto participated</span>
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={onlyPryctoWinner}
+            onChange={(e) => setOnlyPryctoWinner(e.target.checked)}
+          />
+          <span style={{ marginLeft: 6 }}>Prycto winner</span>
+        </label>
       </div>
 
       <h2 style={{ marginTop: 0, marginBottom: '0.5rem', fontWeight: 600 }}>Latest trades</h2>
