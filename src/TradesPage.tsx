@@ -362,6 +362,7 @@ export default function TradesPage() {
                               <th className="px-2 py-1 text-left text-xs font-semibold text-gray-700 border-b">Solver</th>
                               <th className="px-2 py-1 text-left text-xs font-semibold text-gray-700 border-b">Sell bid</th>
                               <th className="px-2 py-1 text-left text-xs font-semibold text-gray-700 border-b">Buy bid</th>
+                              <th className="px-2 py-1 text-right text-xs font-semibold text-gray-700 border-b">Δ vs winner (bps)</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -377,8 +378,13 @@ export default function TradesPage() {
                                   return (bb || 0) - (ab || 0)
                                 })
                               const sorted = winnerBid ? [winnerBid, ...sortedRest] : sortedRest
+                              const winnerBuy = winnerBid ? Number(normalizeAmount(winnerBid.buyAmount, d.buyToken)) : null
                               return sorted.map((b, idx) => {
                                 const isWinner = !!b.winner
+                                const bidBuy = Number(normalizeAmount(b.buyAmount, d.buyToken))
+                                const deltaBps = winnerBuy && winnerBuy !== 0
+                                  ? (((bidBuy - winnerBuy) / winnerBuy) * 10000)
+                                  : null
                                 return (
                                   <tr
                                     key={`${d._id}-bid-${idx}`}
@@ -390,6 +396,7 @@ export default function TradesPage() {
                                     </td>
                                     <td className="px-2 py-1 border-b">{formatTokenAmount(b.sellAmount, d.sellToken)}</td>
                                     <td className="px-2 py-1 border-b">{formatTokenAmount(b.buyAmount, d.buyToken)}</td>
+                                    <td className="px-2 py-1 border-b text-right">{deltaBps === null ? '-' : deltaBps.toFixed(1)}</td>
                                   </tr>
                                 )
                               })
