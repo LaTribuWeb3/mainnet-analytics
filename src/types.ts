@@ -20,18 +20,15 @@ export interface TradeDocument {
   owner: string
   sellAmount: string
   sellToken: string
-  transactionFee: string
-  buyUsdcPrice: number
-  sellUsdcPrice: number
-  feeInUSD: number
-  orderBuyValueUsd: number
-  orderSellValueUsd: number
-  rateDiffBps: number
-  usdPnLExcludingFee: number
+  cowswapFeeAmount: bigint;
   competitionData?: CompetitionData
   pryctoApiPrice?: number
+  binancePrices?: BinancePrices
 }
-
+export type BinancePrices = {
+  sellTokenInUSD: number;
+  buyTokenInUSD: number;
+}
 export interface TradesApiResponse {
   documents: TradeDocument[]
 }
