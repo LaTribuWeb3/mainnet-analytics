@@ -5,7 +5,7 @@ import { normalizeAmount, toDay } from './utils/price'
 import { formatCompactTruncate } from './utils/format'
 import { solverLabel } from './utils/solvers'
 
-const API_URL = '/api/trades'
+const API_PATH = '/trades'
 
 type ApiItem = {
   _id: string
@@ -83,7 +83,8 @@ export default function TradesPage() {
         setLoading(true)
         setError(null)
         // Build query with token addresses if both are provided
-        const url = new URL(API_URL, window.location.origin)
+        const apiBase = import.meta.env.DEV ? '/api' : 'https://cowswap-data-api.la-tribu.xyz'
+        const url = new URL(apiBase + API_PATH, window.location.origin)
         const a = sellTokenFilter.trim()
         const b = buyTokenFilter.trim()
         if (a && b) {
@@ -92,6 +93,11 @@ export default function TradesPage() {
         }
         const res = await fetch(url.toString(), { signal: abort.signal })
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const contentType = res.headers.get('content-type') || ''
+        if (!contentType.includes('application/json')) {
+          const txt = await res.text()
+          throw new Error(`Unexpected response content-type: ${contentType}. Body: ${txt.slice(0, 200)}`)
+        }
         const json = (await res.json()) as ApiResponse | TradesApiResponse
         const items = Array.isArray((json as ApiResponse).items)
           ? (json as ApiResponse).items
