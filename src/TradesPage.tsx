@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { BidDatum, TradeDocument, TradesApiResponse } from './types'
+import { normalizeAmount, toDay } from './utils/price'
+import { formatCompactTruncate } from './utils/format'
 
 const API_URL = '/api/trades'
 
@@ -61,6 +63,11 @@ export default function TradesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [documents, setDocuments] = useState<TradeDocument[]>([])
+  // no clipboard UI; using external links instead
+  const [startDate, setStartDate] = useState<string | null>(null)
+  const [endDate, setEndDate] = useState<string | null>(null)
+  const [sellTokenFilter, setSellTokenFilter] = useState<string>('')
+  const [buyTokenFilter, setBuyTokenFilter] = useState<string>('')
 
   useEffect(() => {
     const abort = new AbortController()
@@ -96,6 +103,95 @@ export default function TradesPage() {
     }
   }, [documents])
 
+  // Establish default date range once data is loaded: earliest day to latest day (UTC)
+  useEffect(() => {
+    if (documents.length === 0) return
+    if (startDate && endDate) return
+    let minTs = Number.POSITIVE_INFINITY
+    let maxTs = 0
+    for (const d of documents) {
+      const ts = d.blockTimestamp
+      if (Number.isFinite(ts)) {
+        if ((ts as number) < minTs) minTs = ts as number
+        if ((ts as number) > maxTs) maxTs = ts as number
+      }
+    }
+    if (!Number.isFinite(minTs) || !Number.isFinite(maxTs)) return
+    const minDay = toDay(minTs as number)
+    const maxDay = toDay(maxTs as number)
+    if (!startDate) setStartDate(minDay)
+    if (!endDate) setEndDate(maxDay)
+  }, [documents, startDate, endDate, sellTokenFilter, buyTokenFilter])
+
+  function dayStartSec(dayStr: string): number {
+    const [y, m, d] = dayStr.split('-').map((x) => Number(x))
+    return Math.floor(Date.UTC(y, (m as number) - 1, d as number) / 1000)
+  }
+
+  const filteredDocs = useMemo(() => {
+    const hasDates = !!startDate && !!endDate
+    const startSec = hasDates ? dayStartSec(startDate as string) : 0
+    const endExclusive = hasDates ? dayStartSec(endDate as string) + 24 * 60 * 60 : Number.POSITIVE_INFINITY
+    return documents.filter((d) => {
+      const ts = d.blockTimestamp
+      if (!(Number.isFinite(ts) && (ts as number) >= startSec && (ts as number) < endExclusive)) return false
+      if (sellTokenFilter && d.sellToken.toLowerCase() !== sellTokenFilter.toLowerCase()) return false
+      if (buyTokenFilter && d.buyToken.toLowerCase() !== buyTokenFilter.toLowerCase()) return false
+      return true
+    })
+  }, [documents, startDate, endDate, sellTokenFilter, buyTokenFilter])
+
+  const minMaxDays = useMemo(() => {
+    if (documents.length === 0) return { minDay: '', maxDay: '' }
+    let minTs = Number.POSITIVE_INFINITY
+    let maxTs = 0
+    for (const d of documents) {
+      const ts = d.blockTimestamp
+      if (Number.isFinite(ts)) {
+        if ((ts as number) < minTs) minTs = ts as number
+        if ((ts as number) > maxTs) maxTs = ts as number
+      }
+    }
+    if (!Number.isFinite(minTs) || !Number.isFinite(maxTs)) return { minDay: '', maxDay: '' }
+    return { minDay: toDay(minTs as number), maxDay: toDay(maxTs as number) }
+  }, [documents])
+
+  function truncate6(value: string): string {
+    return value.length <= 6 ? value : value.slice(0, 6)
+  }
+
+  function tokenSymbol(addr: string): string {
+    const a = addr.toLowerCase()
+    if (a === '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48') return 'USDC'
+    if (a === '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2') return 'WETH'
+    if (a === '0xdac17f958d2ee523a2206206994597c13d831ec7') return 'USDT'
+    if (a === '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599') return 'WBTC'
+    if (a === '0x4c9edd5852cd905f086c759e8383e09bff1e68b3') return 'USDE'
+    return truncate6(addr)
+  }
+
+  function formatTokenAmount(raw: string, token: string): string {
+    const v = normalizeAmount(raw, token)
+    if (!Number.isFinite(v)) return '-'
+    const sym = tokenSymbol(token)
+    if (sym === 'USDC' || sym === 'USDT' || sym === 'USDE') {
+      return `${formatCompactTruncate(v as number, 2)} ${sym}`
+    }
+    const s = (v as number).toFixed(6).replace(/\.0+$/, '').replace(/(\.[0-9]*?)0+$/, '$1')
+    return `${s} ${sym}`
+  }
+
+  const cowOrderUrl = (uid: string) => `https://explorer.cow.fi/orders/${uid}`
+  const etherscanTxUrl = (tx: string) => `https://etherscan.io/tx/${tx}`
+
+  function formatUsdVolume(doc: TradeDocument): string {
+    const amount = normalizeAmount(doc.sellAmount, doc.sellToken)
+    const px = (doc.binancePrices as { sellTokenInUSD?: number } | undefined)?.sellTokenInUSD
+    if (!Number.isFinite(amount) || !Number.isFinite(px)) return '-'
+    const vol = (amount as number) * (px as number)
+    return `$${formatCompactTruncate(vol, 2)}`
+  }
+
   if (loading) {
     return (
       <div style={{ maxWidth: 960, margin: '0 auto', padding: '1rem' }}>
@@ -128,7 +224,48 @@ export default function TradesPage() {
         </div>
       </div>
 
-      <h2 style={{ marginTop: '1rem', marginBottom: '0.5rem', fontWeight: 600 }}>Latest trades</h2>
+      {/* Filters */}
+      <div style={{ marginTop: '1rem', marginBottom: '0.5rem', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+        <label htmlFor="start-date">From</label>
+        <input
+          id="start-date"
+          type="date"
+          value={startDate ?? ''}
+          min={minMaxDays.minDay}
+          max={endDate ?? minMaxDays.maxDay}
+          onChange={(e) => setStartDate(e.target.value || null)}
+        />
+        <label htmlFor="end-date">to</label>
+        <input
+          id="end-date"
+          type="date"
+          value={endDate ?? ''}
+          min={startDate ?? minMaxDays.minDay}
+          max={minMaxDays.maxDay}
+          onChange={(e) => setEndDate(e.target.value || null)}
+        />
+        <div style={{ width: 24 }} />
+        <label htmlFor="sell-token">Sell token</label>
+        <select id="sell-token" value={sellTokenFilter} onChange={(e) => setSellTokenFilter(e.target.value)}>
+          <option value="">Any</option>
+          <option value="0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48">USDC</option>
+          <option value="0xdac17f958d2ee523a2206206994597c13d831ec7">USDT</option>
+          <option value="0x2260fac5e5542a773aa44fbcfedf7c193bc2c599">WBTC</option>
+          <option value="0x4c9edd5852cd905f086c759e8383e09bff1e68b3">USDE</option>
+          <option value="0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2">WETH</option>
+        </select>
+        <label htmlFor="buy-token">Buy token</label>
+        <select id="buy-token" value={buyTokenFilter} onChange={(e) => setBuyTokenFilter(e.target.value)}>
+          <option value="">Any</option>
+          <option value="0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48">USDC</option>
+          <option value="0xdac17f958d2ee523a2206206994597c13d831ec7">USDT</option>
+          <option value="0x2260fac5e5542a773aa44fbcfedf7c193bc2c599">WBTC</option>
+          <option value="0x4c9edd5852cd905f086c759e8383e09bff1e68b3">USDE</option>
+          <option value="0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2">WETH</option>
+        </select>
+      </div>
+
+      <h2 style={{ marginTop: 0, marginBottom: '0.5rem', fontWeight: 600 }}>Latest trades</h2>
       <table className="min-w-full" style={{ borderCollapse: 'collapse' }}>
         <thead>
           <tr>
@@ -136,21 +273,26 @@ export default function TradesPage() {
             <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700 border-b bg-gray-50">Tx</th>
             <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700 border-b bg-gray-50">Sell</th>
             <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700 border-b bg-gray-50">Buy</th>
-            <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700 border-b bg-gray-50">Winner</th>
-            <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700 border-b bg-gray-50">Block</th>
+            <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700 border-b bg-gray-50">Volume (USD)</th>
           </tr>
         </thead>
         <tbody>
-          {documents.slice(0, 50).map((d) => {
-            const winner = d.competitionData?.bidData?.find((b) => b.winner)
+          {filteredDocs.slice(0, 50).map((d) => {
             return (
               <tr key={d._id} className="odd:bg-white even:bg-gray-50">
-                <td className="px-4 py-2 border-b" style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.orderUid}</td>
-                <td className="px-4 py-2 border-b" style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.txHash}</td>
-                <td className="px-4 py-2 border-b" title={d.sellToken}>{d.sellAmount}</td>
-                <td className="px-4 py-2 border-b" title={d.buyToken}>{d.buyAmount}</td>
-                <td className="px-4 py-2 border-b" style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>{winner?.solverAddress || '-'}</td>
-                <td className="px-4 py-2 border-b text-right">{d.blockNumber}</td>
+                <td className="px-4 py-2 border-b" style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <a href={cowOrderUrl(d.orderUid)} target="_blank" rel="noreferrer" title={d.orderUid}>
+                    {truncate6(d.orderUid)}...
+                  </a>
+                </td>
+                <td className="px-4 py-2 border-b" style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <a href={etherscanTxUrl(d.txHash)} target="_blank" rel="noreferrer" title={d.txHash}>
+                    {truncate6(d.txHash)}...
+                  </a>
+                </td>
+                <td className="px-4 py-2 border-b" title={d.sellToken}>{formatTokenAmount(d.sellAmount, d.sellToken)}</td>
+                <td className="px-4 py-2 border-b" title={d.buyToken}>{formatTokenAmount(d.buyAmount, d.buyToken)}</td>
+                <td className="px-4 py-2 border-b text-right">{formatUsdVolume(d)}</td>
               </tr>
             )
           })}
