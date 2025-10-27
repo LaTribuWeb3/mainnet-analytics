@@ -9,6 +9,8 @@ function findPryctoBids(doc: TradeDocument): BidDatum[] {
   return bids.filter((b) => SOLVERS_LC[b.solverAddress?.toLowerCase?.() || ''] === PRYCTO_LABEL)
 }
 
+type MaybeExtended = TradeDocument & { sellUsdcPrice?: number; buyUsdcPrice?: number }
+
 function impliedUsdcPerSellTokenFromBid(doc: TradeDocument, bid: BidDatum): number | null {
   const sellQty = normalizeAmount(bid.sellAmount, doc.sellToken)
   const buyQty = normalizeAmount(bid.buyAmount, doc.buyToken)
@@ -16,12 +18,15 @@ function impliedUsdcPerSellTokenFromBid(doc: TradeDocument, bid: BidDatum): numb
   // USDC per sell token implied by this bid:
   // (USDC per buy token) * (buy tokens per sell token)
   // = doc.buyUsdcPrice * (buyQty / sellQty)
-  const usdcPerSell = doc.buyUsdcPrice * (buyQty / sellQty)
+  const buyUsdc = (doc as MaybeExtended).buyUsdcPrice ?? (doc.binancePrices?.buyTokenInUSD as number | undefined)
+  if (!isFinite(buyUsdc as number)) return null
+  const usdcPerSell = (buyUsdc as number) * (buyQty / sellQty)
   return isFinite(usdcPerSell) ? usdcPerSell : null
 }
 
 export function computeSellTokenPricesUSDC(doc: TradeDocument): { market: number | null; prycto: number | null } {
-  const market = isFinite(doc.sellUsdcPrice) ? doc.sellUsdcPrice : null
+  const marketRaw = (doc as MaybeExtended).sellUsdcPrice ?? (doc.binancePrices?.sellTokenInUSD as number | undefined)
+  const market = isFinite(marketRaw as number) ? (marketRaw as number) : null
 
   const pryctoBids = findPryctoBids(doc)
   if (pryctoBids.length === 0) return { market, prycto: null }
