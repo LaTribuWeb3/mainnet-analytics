@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import type { BidDatum, TradeDocument, TradesApiResponse } from './types'
 import { normalizeAmount, toDay } from './utils/price'
 import { formatCompactTruncate } from './utils/format'
@@ -81,7 +82,15 @@ export default function TradesPage() {
       try {
         setLoading(true)
         setError(null)
-        const res = await fetch(API_URL, { signal: abort.signal })
+        // Build query with token addresses if both are provided
+        const url = new URL(API_URL, window.location.origin)
+        const a = sellTokenFilter.trim()
+        const b = buyTokenFilter.trim()
+        if (a && b) {
+          url.searchParams.set('tokenA', a)
+          url.searchParams.set('tokenB', b)
+        }
+        const res = await fetch(url.toString(), { signal: abort.signal })
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const json = (await res.json()) as ApiResponse | TradesApiResponse
         const items = Array.isArray((json as ApiResponse).items)
@@ -100,7 +109,7 @@ export default function TradesPage() {
     }
     load()
     return () => abort.abort()
-  }, [])
+  }, [sellTokenFilter, buyTokenFilter])
 
   const summary = useMemo(() => {
     return {
@@ -214,24 +223,59 @@ export default function TradesPage() {
 
   if (loading) {
     return (
-      <div style={{ maxWidth: 960, margin: '0 auto', padding: '1rem' }}>
-        <h1>Trades (Cowswap Data API)</h1>
-        <p>Loading…</p>
+      <div>
+        <div style={{ borderBottom: '1px solid #e5e7eb', background: '#ffffff' }}>
+          <div style={{ maxWidth: 960, margin: '0 auto', padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+            <div style={{ fontWeight: 600 }}>Mainnet Analytics</div>
+            <nav style={{ display: 'flex', gap: 12 }}>
+              <Link to="/">Home</Link>
+              <Link to="/trades">Trades</Link>
+            </nav>
+            <div />
+          </div>
+        </div>
+        <div style={{ maxWidth: 960, margin: '0 auto', padding: '1rem' }}>
+          <h1>Trades (Cowswap Data API)</h1>
+          <p>Loading…</p>
+        </div>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div style={{ maxWidth: 960, margin: '0 auto', padding: '1rem' }}>
-        <h1>Trades (Cowswap Data API)</h1>
-        <p style={{ color: '#dc2626' }}>Error: {error}</p>
+      <div>
+        <div style={{ borderBottom: '1px solid #e5e7eb', background: '#ffffff' }}>
+          <div style={{ maxWidth: 960, margin: '0 auto', padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+            <div style={{ fontWeight: 600 }}>Mainnet Analytics</div>
+            <nav style={{ display: 'flex', gap: 12 }}>
+              <Link to="/">Home</Link>
+              <Link to="/trades">Trades</Link>
+            </nav>
+            <div />
+          </div>
+        </div>
+        <div style={{ maxWidth: 960, margin: '0 auto', padding: '1rem' }}>
+          <h1>Trades (Cowswap Data API)</h1>
+          <p style={{ color: '#dc2626' }}>Error: {error}</p>
+        </div>
       </div>
     )
   }
 
   return (
-    <div style={{ maxWidth: 960, margin: '0 auto', padding: '1rem' }}>
+    <div>
+      <div style={{ borderBottom: '1px solid #e5e7eb', background: '#ffffff' }}>
+        <div style={{ maxWidth: 960, margin: '0 auto', padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+          <div style={{ fontWeight: 600 }}>Mainnet Analytics</div>
+          <nav style={{ display: 'flex', gap: 12 }}>
+            <Link to="/">Home</Link>
+            <Link to="/trades">Trades</Link>
+          </nav>
+          <div />
+        </div>
+      </div>
+      <div style={{ maxWidth: 960, margin: '0 auto', padding: '1rem' }}>
       <h1>Trades (Cowswap Data API)</h1>
       <div style={{ display: 'flex', gap: '1rem' }}>
         <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.5rem 0.75rem' }}>
@@ -414,6 +458,7 @@ export default function TradesPage() {
           })}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }

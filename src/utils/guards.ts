@@ -7,40 +7,27 @@ function hasValue(value: unknown): boolean {
 export function isCompetitionData(value: unknown): value is CompetitionData {
   if (value === null || typeof value !== 'object') return false
   const v = value as Record<string, unknown>
-  return (
-    hasValue(v.buyUsdcPrice) &&
-    hasValue(v.sellUsdcPrice) &&
-    hasValue(v.feeInUSD) &&
-    hasValue(v.orderBuyValueUsd) &&
-    hasValue(v.orderSellValueUsd) &&
-    hasValue(v.rateDiffBps) &&
-    hasValue(v.usdPnLExcludingFee)
-  )
+  const bids = (v as { bidData?: unknown }).bidData
+  return Array.isArray(bids)
 }
 
 export function isTradeDocument(value: unknown): value is TradeDocument {
   if (value === null || typeof value !== 'object') return false
   const v = value as Record<string, unknown>
 
+  const hasTx = hasValue(v.txHash) || hasValue(v.transactionHash)
+
   const baseFieldsPresent =
     hasValue(v._id) &&
     hasValue(v.orderUid) &&
-    hasValue(v.txHash) &&
+    hasTx &&
     hasValue(v.blockNumber) &&
     hasValue(v.blockTimestamp) &&
     hasValue(v.buyAmount) &&
     hasValue(v.buyToken) &&
     hasValue(v.owner) &&
     hasValue(v.sellAmount) &&
-    hasValue(v.sellToken) &&
-    hasValue(v.transactionFee) &&
-    hasValue(v.buyUsdcPrice) &&
-    hasValue(v.sellUsdcPrice) &&
-    hasValue(v.feeInUSD) &&
-    hasValue(v.orderBuyValueUsd) &&
-    hasValue(v.orderSellValueUsd) &&
-    hasValue(v.rateDiffBps) &&
-    hasValue(v.usdPnLExcludingFee)
+    hasValue(v.sellToken)
 
   if (!baseFieldsPresent) return false
   return true
@@ -49,7 +36,7 @@ export function isTradeDocument(value: unknown): value is TradeDocument {
 export const REQUIRED_TRADE_FIELDS = [
   '_id',
   'orderUid',
-  'txHash',
+  'txHash|transactionHash',
   'blockNumber',
   'blockTimestamp',
   'buyAmount',
@@ -57,14 +44,6 @@ export const REQUIRED_TRADE_FIELDS = [
   'owner',
   'sellAmount',
   'sellToken',
-  'transactionFee',
-  'buyUsdcPrice',
-  'sellUsdcPrice',
-  'feeInUSD',
-  'orderBuyValueUsd',
-  'orderSellValueUsd',
-  'rateDiffBps',
-  'usdPnLExcludingFee',
 ] as const
 
 export const REQUIRED_COMPETITION_FIELDS = ['bidData'] as const
@@ -77,6 +56,10 @@ export function getMissingTradeFields(value: unknown): string[] {
   const missing: string[] = []
 
   for (const field of REQUIRED_TRADE_FIELDS) {
+    if (field === 'txHash|transactionHash') {
+      if (!(hasValue(v['txHash']) || hasValue(v['transactionHash']))) missing.push('txHash')
+      continue
+    }
     if (!hasValue(v[field])) missing.push(field)
   }
 
@@ -87,7 +70,7 @@ export function getMissingTradeFields(value: unknown): string[] {
 
   if (comp !== null && comp !== undefined) {
     for (const field of REQUIRED_COMPETITION_FIELDS) {
-      if (!hasValue(comp[field])) missing.push(`competitionData.${field}`)
+      if (!hasValue((comp as Record<string, unknown>)[field])) missing.push(`competitionData.${field}`)
     }
   }
 

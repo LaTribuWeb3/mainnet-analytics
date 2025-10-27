@@ -24,6 +24,11 @@ export interface TradeDocument {
   competitionData?: CompetitionData
   pryctoApiPrice?: number
   binancePrices?: BinancePrices
+  // Derived/optional analytics fields (computed client-side)
+  buyUsdcPrice?: number
+  sellUsdcPrice?: number
+  orderSellValueUsd?: number | string
+  orderBuyValueUsd?: number | string
 }
 export type BinancePrices = {
   sellTokenInUSD: number;
