@@ -29,3 +29,31 @@ export function truncateToDecimals(value: number, decimals: number): string {
   return truncated.toFixed(decimals)
 }
 
+export function truncateNumber(value: number, decimals: number): number {
+  const factor = 10 ** decimals
+  return Math.trunc(value * factor) / factor
+}
+
+export function formatCompactTruncate(value: number, decimals = 2): string {
+  const abs = Math.abs(value)
+  const sign = value < 0 ? '-' : ''
+  let unit = ''
+  let scaled = abs
+  if (abs >= 1e12) {
+    unit = 'T'
+    scaled = abs / 1e12
+  } else if (abs >= 1e9) {
+    unit = 'B'
+    scaled = abs / 1e9
+  } else if (abs >= 1e6) {
+    unit = 'M'
+    scaled = abs / 1e6
+  } else if (abs >= 1e3) {
+    unit = 'K'
+    scaled = abs / 1e3
+  }
+  const truncated = truncateNumber(scaled, decimals)
+  const s = truncated.toFixed(decimals).replace(/\.0+$/, '').replace(/(\.[0-9]*?)0+$/, '$1')
+  return sign + s + unit
+}
+
