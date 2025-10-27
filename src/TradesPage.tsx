@@ -221,6 +221,14 @@ export default function TradesPage() {
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }))
   }
 
+  function formatLocalDateTime(tsSec: number): string {
+    try {
+      return new Date(tsSec * 1000).toLocaleString()
+    } catch {
+      return '-'
+    }
+  }
+
   if (loading) {
     return (
       <div>
@@ -351,6 +359,7 @@ export default function TradesPage() {
       <table className="min-w-full" style={{ borderCollapse: 'collapse' }}>
         <thead>
           <tr>
+            <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700 border-b bg-gray-50">Time</th>
             <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700 border-b bg-gray-50">Order UID</th>
             <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700 border-b bg-gray-50">Tx</th>
             <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700 border-b bg-gray-50">Sell</th>
@@ -370,6 +379,7 @@ export default function TradesPage() {
                   style={{ cursor: 'pointer' }}
                   aria-expanded={isOpen}
                >
+                  <td className="px-4 py-2 border-b" title={String(d.blockTimestamp)}>{formatLocalDateTime(d.blockTimestamp)}</td>
                   <td className="px-4 py-2 border-b" style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     <a
                       href={cowOrderUrl(d.orderUid)}
@@ -398,7 +408,7 @@ export default function TradesPage() {
                 </tr>
                 {isOpen && (
                   <tr>
-                    <td className="px-4 py-2 border-b bg-gray-50" colSpan={5}>
+                    <td className="px-4 py-2 border-b bg-gray-50" colSpan={6}>
                       {d.competitionData?.bidData && d.competitionData.bidData.length > 0 ? (
                         <table className="min-w-full" style={{ borderCollapse: 'collapse' }}>
                           <thead>
