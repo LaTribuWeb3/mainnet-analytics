@@ -802,22 +802,47 @@ export default function App() {
       {dailyDirChartData && dailyDirChartData.length > 0 && (
         <>
           <h2 style={{ marginTop: '1.5rem', marginBottom: '0.5rem', fontWeight: 600 }}>Daily volume by direction</h2>
-          <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.75rem 1rem' }}>
-            <ResponsiveContainer width="100%" height={320}>
-              <LineChart data={dailyDirChartData} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
-                <CartesianGrid stroke="#f3f4f6" />
-                <XAxis dataKey="day" tick={{ fontSize: 12 }} angle={-45} textAnchor="end" height={50} />
-                <YAxis tickFormatter={(v) => `$${formatUSDCCompact(v as number)}`} width={70} />
-                <Tooltip formatter={(v: number) => `$${formatUSDCCompact(v as number)}`} labelFormatter={(label) => `${label}`} />
-                <Legend />
-                <Line type="monotone" dataKey="aToB" name={`${tokenSymbol(tokenA)} → ${tokenSymbol(tokenB)}`} stroke="#2563eb" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="bToA" name={`${tokenSymbol(tokenB)} → ${tokenSymbol(tokenA)}`} stroke="#f59e0b" strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-            <div style={{ marginTop: 8, color: '#6b7280', fontSize: 12 }}>
-              Daily USD volume split by trade direction for the selected pair and timespan.
+          {dailyDirChartData.length === 1 ? (
+            <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.75rem 1rem' }}>
+              {(() => {
+                const only = dailyDirChartData[0]
+                const aToB = only.aToB
+                const bToA = only.bToA
+                return (
+                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'stretch', flexWrap: 'wrap' }}>
+                    <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.5rem 0.75rem' }}>
+                      <div>{`${tokenSymbol(tokenA)} → ${tokenSymbol(tokenB)}`}</div>
+                      <div>{`$${formatUSDCCompact(aToB)}`}</div>
+                    </div>
+                    <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.5rem 0.75rem' }}>
+                      <div>{`${tokenSymbol(tokenB)} → ${tokenSymbol(tokenA)}`}</div>
+                      <div>{`$${formatUSDCCompact(bToA)}`}</div>
+                    </div>
+                  </div>
+                )
+              })()}
+              <div style={{ marginTop: 8, color: '#6b7280', fontSize: 12 }}>
+                Yesterday's USD volume split by direction for the selected pair.
+              </div>
             </div>
-          </div>
+          ) : (
+            <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.75rem 1rem' }}>
+              <ResponsiveContainer width="100%" height={320}>
+                <LineChart data={dailyDirChartData} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
+                  <CartesianGrid stroke="#f3f4f6" />
+                  <XAxis dataKey="day" tick={{ fontSize: 12 }} angle={-45} textAnchor="end" height={50} />
+                  <YAxis tickFormatter={(v) => `$${formatUSDCCompact(v as number)}`} width={70} />
+                  <Tooltip formatter={(v: number) => `$${formatUSDCCompact(v as number)}`} labelFormatter={(label) => `${label}`} />
+                  <Legend />
+                  <Line type="monotone" dataKey="aToB" name={`${tokenSymbol(tokenA)} → ${tokenSymbol(tokenB)}`} stroke="#2563eb" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="bToA" name={`${tokenSymbol(tokenB)} → ${tokenSymbol(tokenA)}`} stroke="#f59e0b" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+              <div style={{ marginTop: 8, color: '#6b7280', fontSize: 12 }}>
+                Daily USD volume split by trade direction for the selected pair and timespan.
+              </div>
+            </div>
+          )}
         </>
       )}
 
