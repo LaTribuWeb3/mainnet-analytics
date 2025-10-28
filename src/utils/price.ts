@@ -51,13 +51,15 @@ export function computePriceUSDCPerToken(
 ): number | null {
   const s = sellToken.toLowerCase()
   const b = buyToken.toLowerCase()
-  if (s === USDC && b !== USDC) {
+  const isSellStable = s === USDC || s === USDT || s === USDE
+  const isBuyStable = b === USDC || b === USDT || b === USDE
+  if (isSellStable && !isBuyStable) {
     const usdc = normalizeAmount(sellAmountRaw, s)
     const other = normalizeAmount(buyAmountRaw, b)
     if (other === 0) return null
     return usdc / other
   }
-  if (b === USDC && s !== USDC) {
+  if (isBuyStable && !isSellStable) {
     const other = normalizeAmount(sellAmountRaw, s)
     const usdc = normalizeAmount(buyAmountRaw, b)
     if (other === 0) return null
@@ -77,8 +79,10 @@ export function higherPriceIsBetterUSDCPerBase(sellToken: string, buyToken: stri
 export function higherPriceIsBetterUSDCPerToken(sellToken: string, buyToken: string): boolean | null {
   const s = sellToken.toLowerCase()
   const b = buyToken.toLowerCase()
-  if (s !== USDC && b === USDC) return true // selling token for USDC → higher USDC/token is better
-  if (s === USDC && b !== USDC) return false // buying token with USDC → lower USDC/token is better
+  const isSellStable = s === USDC || s === USDT || s === USDE
+  const isBuyStable = b === USDC || b === USDT || b === USDE
+  if (!isSellStable && isBuyStable) return true // selling token for USD stable → higher USD/token is better
+  if (isSellStable && !isBuyStable) return false // buying token with USD stable → lower USD/token is better
   return null
 }
 
@@ -130,6 +134,11 @@ export function toDay(ts: number): string {
   return `${y}-${m}-${da}`
 }
 
-export const TOKENS = { USDC, WBTC, WETH }
+export function isStableToken(addr: string): boolean {
+  const a = (addr || '').toLowerCase()
+  return a === USDC || a === USDT || a === USDE
+}
+
+export const TOKENS = { USDC, WBTC, WETH, USDT, USDE }
 
 
