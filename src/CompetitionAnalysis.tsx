@@ -165,6 +165,34 @@ export default function CompetitionAnalysis() {
       .map((s) => s.address.toLowerCase())
   }, [solverWins])
 
+  // Sorting for table
+  const [sortBy, setSortBy] = useState<'solver' | 'wins' | 'winRate' | 'volWinRate' | 'volume'>('wins')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  function toggleSort(next: 'solver' | 'wins' | 'winRate' | 'volWinRate' | 'volume') {
+    setSortBy((prev) => {
+      if (prev === next) {
+        setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+        return prev
+      }
+      // Default directions: solver asc, numerics desc
+      setSortDir(next === 'solver' ? 'asc' : 'desc')
+      return next
+    })
+  }
+  const solverRows = useMemo(() => {
+    const rows = solverWins.slice()
+    rows.sort((a, b) => {
+      let cmp = 0
+      if (sortBy === 'solver') cmp = a.label.localeCompare(b.label)
+      else if (sortBy === 'wins') cmp = (a.count || 0) - (b.count || 0)
+      else if (sortBy === 'winRate') cmp = (a.winRatePct || 0) - (b.winRatePct || 0)
+      else if (sortBy === 'volWinRate') cmp = ((a.volume / (totalVolume || 1)) * 100) - ((b.volume / (totalVolume || 1)) * 100)
+      else if (sortBy === 'volume') cmp = (a.volume || 0) - (b.volume || 0)
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+    return rows
+  }, [solverWins, sortBy, sortDir, totalVolume])
+
   // Solver margin vs market: compute delta for all bids per solver, aggregate hourly, 6h MA per solver, and pivot for chart
   const solverHourlyChart = useMemo(() => {
     const solverHourAgg: Map<string, Map<number, { sum: number; n: number }>> = new Map()
@@ -303,15 +331,45 @@ export default function CompetitionAnalysis() {
               <table className="min-w-full" style={{ borderCollapse: 'collapse' }}>
                 <thead>
                   <tr>
-                    <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700 border-b bg-gray-50">Solver</th>
-                    <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700 border-b bg-gray-50">Wins</th>
-                    <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700 border-b bg-gray-50">Win rate</th>
-                    <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700 border-b bg-gray-50">Win rate (vol)</th>
-                    <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700 border-b bg-gray-50">Volume won (USD)</th>
+                    <th
+                      className="px-4 py-2 text-left text-sm font-semibold text-gray-700 border-b bg-gray-50"
+                      onClick={() => toggleSort('solver')}
+                      style={{ cursor: 'pointer', userSelect: 'none' }}
+                    >
+                      Solver {sortBy === 'solver' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+                    </th>
+                    <th
+                      className="px-4 py-2 text-right text-sm font-semibold text-gray-700 border-b bg-gray-50"
+                      onClick={() => toggleSort('wins')}
+                      style={{ cursor: 'pointer', userSelect: 'none' }}
+                    >
+                      Wins {sortBy === 'wins' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+                    </th>
+                    <th
+                      className="px-4 py-2 text-right text-sm font-semibold text-gray-700 border-b bg-gray-50"
+                      onClick={() => toggleSort('winRate')}
+                      style={{ cursor: 'pointer', userSelect: 'none' }}
+                    >
+                      Win rate {sortBy === 'winRate' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+                    </th>
+                    <th
+                      className="px-4 py-2 text-right text-sm font-semibold text-gray-700 border-b bg-gray-50"
+                      onClick={() => toggleSort('volWinRate')}
+                      style={{ cursor: 'pointer', userSelect: 'none' }}
+                    >
+                      Win rate (vol) {sortBy === 'volWinRate' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+                    </th>
+                    <th
+                      className="px-4 py-2 text-right text-sm font-semibold text-gray-700 border-b bg-gray-50"
+                      onClick={() => toggleSort('volume')}
+                      style={{ cursor: 'pointer', userSelect: 'none' }}
+                    >
+                      Volume won (USD) {sortBy === 'volume' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {solverWins.map((s) => (
+                  {solverRows.map((s) => (
                     <tr key={s.address} className="odd:bg-white even:bg-gray-50">
                       <td className="px-4 py-2 border-b" title={s.address}>{s.label}</td>
                       <td className="px-4 py-2 border-b text-right">{s.count.toLocaleString()}</td>
