@@ -289,6 +289,7 @@ export default function TradesPage() {
           <nav style={{ display: 'flex', gap: 12 }}>
             <Link to="/">Home</Link>
             <Link to="/trades">Trades</Link>
+            <Link to="/competition">Competition</Link>
           </nav>
           <div />
         </div>
