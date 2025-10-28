@@ -170,6 +170,44 @@ export default function App() {
     })
   }, [pryctoWinVolSeries])
 
+  // Daily volume by direction (TokenA→TokenB vs TokenB→TokenA) for selected timespan
+  const dailyDirChartData = useMemo(() => {
+    if (!rawResponse) return null
+    const now = new Date()
+    const endSec = Math.floor(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) / 1000)
+    const daySec = 24 * 60 * 60
+    const startSec =
+      timeSpan === 'yesterday'
+        ? endSec - daySec
+        : timeSpan === 'last7'
+        ? endSec - 7 * daySec
+        : endSec - 30 * daySec
+
+    const a = tokenA.toLowerCase()
+    const b = tokenB.toLowerCase()
+    const dayTo = new Map<string, { aToB: number; bToA: number }>()
+    for (const d of rawResponse.documents) {
+      const tsRaw = (d as { blockTimestamp?: number | string }).blockTimestamp
+      const ts = typeof tsRaw === 'string' ? Number(tsRaw) : tsRaw
+      if (!Number.isFinite(ts)) continue
+      if ((ts as number) < startSec || (ts as number) >= endSec) continue
+      const sellLc = (d.sellToken || '').toLowerCase()
+      const buyLc = (d.buyToken || '').toLowerCase()
+      if (!((sellLc === a && buyLc === b) || (sellLc === b && buyLc === a))) continue
+      const volRaw = (d as { orderSellValueUsd?: number | string }).orderSellValueUsd
+      const vol = typeof volRaw === 'string' ? Number(volRaw) : volRaw
+      if (!Number.isFinite(vol)) continue
+      const day = toDay(ts as number)
+      if (!dayTo.has(day)) dayTo.set(day, { aToB: 0, bToA: 0 })
+      const entry = dayTo.get(day) as { aToB: number; bToA: number }
+      if (sellLc === a && buyLc === b) entry.aToB += vol as number
+      else entry.bToA += vol as number
+    }
+    return Array.from(dayTo.entries())
+      .map(([day, v]) => ({ day, ...v }))
+      .sort((x, y) => (x.day < y.day ? -1 : 1))
+  }, [rawResponse, timeSpan, tokenA, tokenB])
+
   const processResponse = useCallback(
     (json: TradesApiResponse, span: 'yesterday' | 'last7' | 'last30') => {
       const now = new Date()
@@ -760,6 +798,28 @@ export default function App() {
           </tr>
         </tbody>
       </table>
+
+      {dailyDirChartData && dailyDirChartData.length > 0 && (
+        <>
+          <h2 style={{ marginTop: '1.5rem', marginBottom: '0.5rem', fontWeight: 600 }}>Daily volume by direction</h2>
+          <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.75rem 1rem' }}>
+            <ResponsiveContainer width="100%" height={320}>
+              <LineChart data={dailyDirChartData} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
+                <CartesianGrid stroke="#f3f4f6" />
+                <XAxis dataKey="day" tick={{ fontSize: 12 }} angle={-45} textAnchor="end" height={50} />
+                <YAxis tickFormatter={(v) => `$${formatUSDCCompact(v as number)}`} width={70} />
+                <Tooltip formatter={(v: number) => `$${formatUSDCCompact(v as number)}`} labelFormatter={(label) => `${label}`} />
+                <Legend />
+                <Line type="monotone" dataKey="aToB" name={`${tokenSymbol(tokenA)} → ${tokenSymbol(tokenB)}`} stroke="#2563eb" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="bToA" name={`${tokenSymbol(tokenB)} → ${tokenSymbol(tokenA)}`} stroke="#f59e0b" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+            <div style={{ marginTop: 8, color: '#6b7280', fontSize: 12 }}>
+              Daily USD volume split by trade direction for the selected pair and timespan.
+            </div>
+          </div>
+        </>
+      )}
 
       {/* <h2 style={{ marginTop: '1.5rem', marginBottom: '0.5rem', fontWeight: 600 }}>Prycto analytics</h2>
       <table className="min-w-full" style={{ borderCollapse: 'collapse' }}>
