@@ -310,7 +310,7 @@ export default function CompetitionAnalysis() {
         </div>
 
         {loading ? (
-          <p>Loading…</p>
+          <p>Loading data…</p>
         ) : error ? (
           <p style={{ color: '#dc2626' }}>Error: {error}</p>
         ) : (
