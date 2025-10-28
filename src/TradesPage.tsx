@@ -70,6 +70,8 @@ export default function TradesPage() {
   const [endDate, setEndDate] = useState<string | null>(null)
   const [sellTokenFilter, setSellTokenFilter] = useState<string>('')
   const [buyTokenFilter, setBuyTokenFilter] = useState<string>('')
+  const [orderUidFilter, setOrderUidFilter] = useState<string>('')
+  const [txHashFilter, setTxHashFilter] = useState<string>('')
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [onlyPryctoParticipated, setOnlyPryctoParticipated] = useState<boolean>(false)
   const [onlyPryctoWinner, setOnlyPryctoWinner] = useState<boolean>(false)
@@ -158,6 +160,8 @@ export default function TradesPage() {
       if (!(Number.isFinite(ts) && (ts as number) >= startSec && (ts as number) < endExclusive)) return false
       if (sellTokenFilter && d.sellToken.toLowerCase() !== sellTokenFilter.toLowerCase()) return false
       if (buyTokenFilter && d.buyToken.toLowerCase() !== buyTokenFilter.toLowerCase()) return false
+      if (orderUidFilter && !d.orderUid.toLowerCase().includes(orderUidFilter.toLowerCase())) return false
+      if (txHashFilter && !d.txHash.toLowerCase().includes(txHashFilter.toLowerCase())) return false
       if (onlyPryctoParticipated || onlyPryctoWinner) {
         const bids = (d.competitionData?.bidData || [])
         const participated = bids.some((b) => (b.solverAddress || '').toLowerCase() === PRYCTO_ADDRESS)
@@ -170,7 +174,7 @@ export default function TradesPage() {
       }
       return true
     })
-  }, [documents, startDate, endDate, sellTokenFilter, buyTokenFilter, onlyPryctoParticipated, onlyPryctoWinner])
+  }, [documents, startDate, endDate, sellTokenFilter, buyTokenFilter, orderUidFilter, txHashFilter, onlyPryctoParticipated, onlyPryctoWinner])
 
   const minMaxDays = useMemo(() => {
     if (documents.length === 0) return { minDay: '', maxDay: '' }
@@ -340,6 +344,24 @@ export default function TradesPage() {
           <option value="0x4c9edd5852cd905f086c759e8383e09bff1e68b3">USDE</option>
           <option value="0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2">WETH</option>
         </select>
+        <label htmlFor="order-uid">Order UID</label>
+        <input
+          id="order-uid"
+          type="text"
+          placeholder="starts with / contains"
+          value={orderUidFilter}
+          onChange={(e) => setOrderUidFilter(e.target.value)}
+          style={{ width: 220 }}
+        />
+        <label htmlFor="tx-hash">Tx hash</label>
+        <input
+          id="tx-hash"
+          type="text"
+          placeholder="starts with / contains"
+          value={txHashFilter}
+          onChange={(e) => setTxHashFilter(e.target.value)}
+          style={{ width: 220 }}
+        />
       </div>
 
       <div style={{ marginTop: '0.25rem', marginBottom: '0.5rem', display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
