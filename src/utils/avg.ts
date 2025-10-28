@@ -10,7 +10,7 @@
  * - Percent delta: ((A − B) / B) × 100; null if denominator is 0 or values are not finite.
  * - Basis points (bps): 1% = 100 bps.
  */
-import { TOKENS, computePriceUSDCPerToken, higherPriceIsBetterUSDCPerToken, normalizeAmount } from './price'
+import { TOKENS, computePriceUSDCPerToken, higherPriceIsBetterUSDCPerToken, normalizeAmount, isStableToken } from './price'
 
 /**
  * Average Prycto vs Market delta (%) for WETH-side trades.
@@ -94,11 +94,11 @@ export function avgDeltaWinnerVsMarketPct(
     const bidPrice = computePriceUSDCPerToken(d.sellToken, d.buyToken, winner.sellAmount, winner.buyAmount)
     if (!Number.isFinite(bidPrice) || (bidPrice as number) === 0) continue
     // Market USDC per non-USDC token
-    const isSellUSDC = (d.sellToken || '').toLowerCase() === TOKENS.USDC
-    const isBuyUSDC = (d.buyToken || '').toLowerCase() === TOKENS.USDC
+    const isSellStable = isStableToken(d.sellToken)
+    const isBuyStable = isStableToken(d.buyToken)
     let market: number | null = null
-    if (isSellUSDC) market = d.buyUsdcPrice
-    else if (isBuyUSDC) market = d.sellUsdcPrice
+    if (isSellStable) market = d.buyUsdcPrice
+    else if (isBuyStable) market = d.sellUsdcPrice
     if (!Number.isFinite(market) || (market as number) === 0) continue
     const rawPct = (((bidPrice as number) - (market as number)) / (market as number)) * 100
     const dir = higherPriceIsBetterUSDCPerToken(d.sellToken, d.buyToken)
@@ -125,11 +125,11 @@ export function avgDeltaExecVsMarketPct(
   for (const d of docs) {
     const exec = computePriceUSDCPerToken(d.sellToken, d.buyToken, d.sellAmount, d.buyAmount)
     if (!Number.isFinite(exec) || (exec as number) === 0) continue
-    const isSellUSDC = (d.sellToken || '').toLowerCase() === TOKENS.USDC
-    const isBuyUSDC = (d.buyToken || '').toLowerCase() === TOKENS.USDC
+    const isSellStable = isStableToken(d.sellToken)
+    const isBuyStable = isStableToken(d.buyToken)
     let market: number | null = null
-    if (isSellUSDC) market = d.buyUsdcPrice
-    else if (isBuyUSDC) market = d.sellUsdcPrice
+    if (isSellStable) market = d.buyUsdcPrice
+    else if (isBuyStable) market = d.sellUsdcPrice
     if (!Number.isFinite(market) || (market as number) === 0) continue
     const rawPct = (((exec as number) - (market as number)) / (market as number)) * 100
     const dir = higherPriceIsBetterUSDCPerToken(d.sellToken, d.buyToken)
@@ -157,11 +157,11 @@ export function avgExecPremiumBps(
   for (const d of docs) {
     const exec = computePriceUSDCPerToken(d.sellToken, d.buyToken, d.sellAmount, d.buyAmount)
     if (!Number.isFinite(exec) || (exec as number) === 0) continue
-    const isSellUSDC = (d.sellToken || '').toLowerCase() === TOKENS.USDC
-    const isBuyUSDC = (d.buyToken || '').toLowerCase() === TOKENS.USDC
+    const isSellStable = isStableToken(d.sellToken)
+    const isBuyStable = isStableToken(d.buyToken)
     let market: number | null = null
-    if (isSellUSDC) market = d.buyUsdcPrice
-    else if (isBuyUSDC) market = d.sellUsdcPrice
+    if (isSellStable) market = d.buyUsdcPrice
+    else if (isBuyStable) market = d.sellUsdcPrice
     if (!Number.isFinite(market) || (market as number) === 0) continue
     const rawBps = (((exec as number) - (market as number)) / (market as number)) * 10000
     const dir = higherPriceIsBetterUSDCPerToken(d.sellToken, d.buyToken)
