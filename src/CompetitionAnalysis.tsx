@@ -310,7 +310,44 @@ export default function CompetitionAnalysis() {
         </div>
 
         {loading ? (
-          <p>Loading data…</p>
+          <>
+            {/* Skeleton cards */}
+            <div style={{ display: 'flex', gap: '1rem', marginTop: 8, marginBottom: 8 }}>
+              <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.5rem 0.75rem', width: 160 }}>
+                <div style={{ height: 14, background: '#f3f4f6', borderRadius: 4, marginBottom: 8 }} />
+                <div style={{ height: 20, background: '#e5e7eb', borderRadius: 4 }} />
+              </div>
+            </div>
+            {/* Skeleton filters */}
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} style={{ height: 32, width: 180, background: '#f3f4f6', borderRadius: 6 }} />
+              ))}
+            </div>
+            {/* Skeleton table */}
+            <table className="min-w-full" style={{ borderCollapse: 'collapse', width: '100%' }}>
+              <thead>
+                <tr>
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <th key={i} className="px-4 py-2 text-left text-sm font-semibold text-gray-700 border-b bg-gray-50">
+                      <div style={{ height: 14, width: 120, background: '#f3f4f6', borderRadius: 4 }} />
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: 8 }).map((_, r) => (
+                  <tr key={r} className="odd:bg-white even:bg-gray-50">
+                    {Array.from({ length: 5 }).map((__, c) => (
+                      <td key={c} className="px-4 py-2 border-b">
+                        <div style={{ height: 14, width: c === 4 ? 80 : 160, background: '#f3f4f6', borderRadius: 4 }} />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
         ) : error ? (
           <p style={{ color: '#dc2626' }}>Error: {error}</p>
         ) : (
