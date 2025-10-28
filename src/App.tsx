@@ -236,13 +236,6 @@ export default function App() {
         return false
       })
 
-      // Attach implied Prycto price (USDC per sell token) when computable from bids + Binance prices
-      const validWithPrycto = valid.map((d) => {
-        const prices = computeSellTokenPricesUSDC(d)
-        const prycto = prices.prycto
-        return Number.isFinite(prycto) ? ({ ...d, pryctoApiPrice: prycto as number }) : d
-      })
-
       const docsWithSellValue = valid.filter((d) => {
         const raw = (d as { orderSellValueUsd?: number | string }).orderSellValueUsd
         const v = typeof raw === 'string' ? Number(raw) : raw
@@ -383,8 +376,8 @@ export default function App() {
       setPryctoWinVolSeries(volSeries)
       // const newPryctoBuckets = splitTradesBySellValueUsd(pryctoDocs)
       // setPryctoBuckets(newPryctoBuckets)
-      // Prycto API docs: only those with a non-null/numeric pryctoApiPrice (implied from bids + Binance)
-      const pryctoApiDocs = validWithPrycto.filter((doc) => Number.isFinite((doc as { pryctoApiPrice?: number }).pryctoApiPrice))
+      // Prycto API docs: only those with a non-null/numeric pryctoApiPrice
+      const pryctoApiDocs = valid.filter((doc) => Number.isFinite((doc as { pryctoApiPrice?: number }).pryctoApiPrice))
       const newPryctoApiBuckets = splitTradesBySellValueUsd(pryctoApiDocs)
       setPryctoApiBuckets(newPryctoApiBuckets)
       setMissingCounts(missingCounter)
