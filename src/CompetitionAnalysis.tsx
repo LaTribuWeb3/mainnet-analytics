@@ -4,6 +4,8 @@ import type { TradeDocument, TradesApiResponse } from './types'
 import { solverLabel } from './utils/solvers'
 import { normalizeAmount } from './utils/price'
 import { formatUSDCCompact } from './utils/format'
+import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend } from 'recharts'
+import { higherPriceIsBetterUSDCPerToken } from './utils/price'
 
 type ApiItem = {
   _id: string
@@ -118,9 +120,21 @@ export default function CompetitionAnalysis() {
     })
   }, [documents, timeSpan])
 
+  // Filter to orders where margin can be computed (both Binance prices available and direction known)
+  const computableDocs = useMemo(() => {
+    return filteredDocs.filter((d) => {
+      const sellPx = (d.binancePrices as { sellTokenInUSD?: number } | undefined)?.sellTokenInUSD
+      const buyPx = (d.binancePrices as { buyTokenInUSD?: number } | undefined)?.buyTokenInUSD
+      if (!Number.isFinite(sellPx) || !Number.isFinite(buyPx)) return false
+      const dir = higherPriceIsBetterUSDCPerToken(d.sellToken, d.buyToken)
+      if (dir === null) return false
+      return true
+    })
+  }, [filteredDocs])
+
   const solverWins = useMemo(() => {
     const counts: Record<string, { count: number; volume: number }> = {}
-    for (const d of filteredDocs) {
+    for (const d of computableDocs) {
       const bids = d.competitionData?.bidData || []
       const winner = bids.find((b) => b?.winner)
       const addr = (winner?.solverAddress || '').toLowerCase()
@@ -133,14 +147,97 @@ export default function CompetitionAnalysis() {
         counts[addr].volume += (amount as number) * (px as number)
       }
     }
-    const total = filteredDocs.length || 0
+    const total = computableDocs.length || 0
     return Object.entries(counts)
       .map(([address, { count, volume }]) => ({ address, label: solverLabel(address), count, volume, winRatePct: total > 0 ? (count / total) * 100 : 0 }))
       .sort((a, b) => b.count - a.count)
-  }, [filteredDocs])
+  }, [computableDocs])
 
   const totalWins = useMemo(() => solverWins.reduce((acc, s) => acc + s.count, 0), [solverWins])
   const totalVolume = useMemo(() => solverWins.reduce((acc, s) => acc + s.volume, 0), [solverWins])
+
+  // Top 10 solvers by win rate (not volume)
+  const top10ByWinRate = useMemo(() => {
+    return solverWins
+      .slice()
+      .sort((a, b) => b.winRatePct - a.winRatePct)
+      .slice(0, 10)
+      .map((s) => s.address.toLowerCase())
+  }, [solverWins])
+
+  // Solver margin vs market: compute delta for all bids per solver, aggregate hourly, 6h MA per solver, and pivot for chart
+  const solverHourlyChart = useMemo(() => {
+    const solverHourAgg: Map<string, Map<number, { sum: number; n: number }>> = new Map()
+    const hoursSet = new Set<number>()
+    for (const d of computableDocs) {
+      const sellPx = (d.binancePrices as { sellTokenInUSD?: number } | undefined)?.sellTokenInUSD
+      const buyPx = (d.binancePrices as { buyTokenInUSD?: number } | undefined)?.buyTokenInUSD
+      if (!Number.isFinite(sellPx) || !Number.isFinite(buyPx)) continue
+      const market = sellPx as number
+      const buyUsdc = buyPx as number
+      const dir = higherPriceIsBetterUSDCPerToken(d.sellToken, d.buyToken)
+      if (dir === null || market === 0) continue
+      const hour = Math.floor((d.blockTimestamp as number) / 3600) * 3600
+      hoursSet.add(hour)
+      const bids = d.competitionData?.bidData || []
+      for (const b of bids) {
+        const sellQty = normalizeAmount(b.sellAmount, d.sellToken)
+        const buyQty = normalizeAmount(b.buyAmount, d.buyToken)
+        if (!Number.isFinite(sellQty) || !Number.isFinite(buyQty) || sellQty === 0) continue
+        const implied = buyUsdc * ((buyQty as number) / (sellQty as number))
+        if (!Number.isFinite(implied)) continue
+        const rawPct = ((implied - market) / market) * 100
+        const adjustedPct = rawPct * (dir ? 1 : -1)
+        const solver = (b.solverAddress || '').toLowerCase()
+        if (!solver) continue
+        const byHour = solverHourAgg.get(solver) || new Map<number, { sum: number; n: number }>()
+        const e = byHour.get(hour) || { sum: 0, n: 0 }
+        e.sum += adjustedPct
+        e.n += 1
+        byHour.set(hour, e)
+        solverHourAgg.set(solver, byHour)
+      }
+    }
+    const hours = Array.from(hoursSet.values()).sort((a, b) => a - b)
+    // Build per-solver hourly averages and 6h MA
+    const solverSeries: { key: string; label: string; color: string; points: { hour: number; avgPct: number }[] }[] = []
+    const palette = ['#2563eb','#ef4444','#10b981','#f59e0b','#8b5cf6','#06b6d4','#f97316','#84cc16','#ec4899','#22d3ee']
+    let colorIdx = 0
+    for (const [solver, byHour] of solverHourAgg.entries()) {
+      if (top10ByWinRate.length > 0 && !top10ByWinRate.includes(solver)) continue
+      const label = solverLabel(solver)
+      const color = palette[colorIdx % palette.length]
+      colorIdx += 1
+      const pts = hours.map((h) => {
+        const e = byHour.get(h)
+        const v = e && e.n > 0 ? e.sum / e.n : NaN
+        return { hour: h, avgPct: v }
+      })
+      // 6h MA
+      const windowSize = 6
+      const ptsMA = pts.map((_, i) => {
+        let sum = 0
+        let cnt = 0
+        for (let j = Math.max(0, i - (windowSize - 1)); j <= i; j++) {
+          const v = pts[j].avgPct
+          if (Number.isFinite(v)) { sum += v as number; cnt += 1 }
+        }
+        return { hour: pts[i].hour, avgPct: cnt > 0 ? sum / cnt : NaN }
+      })
+      solverSeries.push({ key: solver, label, color, points: ptsMA })
+    }
+    // Pivot rows: one row per hour, columns per solver key
+    const rows = hours.map((h) => {
+      const hourLabel = new Date(h * 1000).toISOString().slice(0, 13).replace('T', ' ')
+      const row: Record<string, number | string> = { hour: h, hourLabel }
+      for (const s of solverSeries) {
+        const p = s.points.find((pt) => pt.hour === h)
+        if (p && Number.isFinite(p.avgPct)) row[s.key] = p.avgPct
+      }
+      return row
+    })
+    return { rows, series: solverSeries }
+  }, [computableDocs, top10ByWinRate, tokenA, tokenB, timeSpan])
 
   return (
     <div>
@@ -235,6 +332,8 @@ export default function CompetitionAnalysis() {
             )}
           </>
         )}
+
+        {/* Chart temporarily hidden */}
       </div>
     </div>
   )
