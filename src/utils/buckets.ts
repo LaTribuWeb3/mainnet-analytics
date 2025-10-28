@@ -6,7 +6,8 @@ export interface TradeBuckets {
   b5k_20k: TradeDocument[]
   b20k_50k: TradeDocument[]
   b50k_100k: TradeDocument[]
-  b100k_500k: TradeDocument[]
+  b100k_250k: TradeDocument[]
+  b250k_500k: TradeDocument[]
   b500k_5m: TradeDocument[]
   b5m_plus: TradeDocument[]
 }
@@ -18,7 +19,8 @@ export function splitTradesBySellValueUsd(trades: TradeDocument[]): TradeBuckets
     b5k_20k: [],
     b20k_50k: [],
     b50k_100k: [],
-    b100k_500k: [],
+    b100k_250k: [],
+    b250k_500k: [],
     b500k_5m: [],
     b5m_plus: [],
   }
@@ -39,8 +41,10 @@ export function splitTradesBySellValueUsd(trades: TradeDocument[]): TradeBuckets
       buckets.b20k_50k.push(trade)
     } else if (value >= 50_000 && value < 100_000) {
       buckets.b50k_100k.push(trade)
-    } else if (value >= 100_000 && value < 500_000) {
-      buckets.b100k_500k.push(trade)
+    } else if (value >= 100_000 && value < 250_000) {
+      buckets.b100k_250k.push(trade)
+    } else if (value >= 250_000 && value < 500_000) {
+      buckets.b250k_500k.push(trade)
     } else if (value >= 500_000 && value < 5_000_000) {
       buckets.b500k_5m.push(trade)
     } else if (value >= 5_000_000) {
