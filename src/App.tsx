@@ -399,7 +399,8 @@ export default function App() {
       b5k_20k: sum(buckets.b5k_20k),
       b20k_50k: sum(buckets.b20k_50k),
       b50k_100k: sum(buckets.b50k_100k),
-      b100k_500k: sum(buckets.b100k_500k),
+      b100k_250k: sum(buckets.b100k_250k),
+      b250k_500k: sum(buckets.b250k_500k),
       b500k_5m: sum(buckets.b500k_5m),
       b5m_plus: sum(buckets.b5m_plus),
     }
@@ -419,7 +420,8 @@ export default function App() {
       b5k_20k: sum(pryctoNonWinBuckets.b5k_20k),
       b20k_50k: sum(pryctoNonWinBuckets.b20k_50k),
       b50k_100k: sum(pryctoNonWinBuckets.b50k_100k),
-      b100k_500k: sum(pryctoNonWinBuckets.b100k_500k),
+      b100k_250k: sum(pryctoNonWinBuckets.b100k_250k),
+      b250k_500k: sum(pryctoNonWinBuckets.b250k_500k),
       b500k_5m: sum(pryctoNonWinBuckets.b500k_5m),
       b5m_plus: sum(pryctoNonWinBuckets.b5m_plus),
     }
@@ -444,7 +446,8 @@ export default function App() {
       b5k_20k: avgExecPremiumBps(toAvgInput(buckets.b5k_20k)),
       b20k_50k: avgExecPremiumBps(toAvgInput(buckets.b20k_50k)),
       b50k_100k: avgExecPremiumBps(toAvgInput(buckets.b50k_100k)),
-      b100k_500k: avgExecPremiumBps(toAvgInput(buckets.b100k_500k)),
+      b100k_250k: avgExecPremiumBps(toAvgInput(buckets.b100k_250k)),
+      b250k_500k: avgExecPremiumBps(toAvgInput(buckets.b250k_500k)),
       b500k_5m: avgExecPremiumBps(toAvgInput(buckets.b500k_5m)),
       b5m_plus: avgExecPremiumBps(toAvgInput(buckets.b5m_plus)),
     }
@@ -462,7 +465,8 @@ export default function App() {
       buckets.b5k_20k.length +
       buckets.b20k_50k.length +
       buckets.b50k_100k.length +
-      buckets.b100k_500k.length +
+      buckets.b100k_250k.length +
+      buckets.b250k_500k.length +
       buckets.b500k_5m.length +
       buckets.b5m_plus.length
     const totalVolume = volumes
@@ -471,7 +475,8 @@ export default function App() {
         volumes.b5k_20k +
         volumes.b20k_50k +
         volumes.b50k_100k +
-        volumes.b100k_500k +
+        volumes.b100k_250k +
+        volumes.b250k_500k +
         volumes.b500k_5m +
         volumes.b5m_plus
       : 0
@@ -486,7 +491,8 @@ export default function App() {
       pryctoNonWinBuckets.b5k_20k.length +
       pryctoNonWinBuckets.b20k_50k.length +
       pryctoNonWinBuckets.b50k_100k.length +
-      pryctoNonWinBuckets.b100k_500k.length +
+      pryctoNonWinBuckets.b100k_250k.length +
+      pryctoNonWinBuckets.b250k_500k.length +
       pryctoNonWinBuckets.b500k_5m.length +
       pryctoNonWinBuckets.b5m_plus.length
     const totalVolume = pryctoNonWinVolumes
@@ -495,7 +501,8 @@ export default function App() {
         pryctoNonWinVolumes.b5k_20k +
         pryctoNonWinVolumes.b20k_50k +
         pryctoNonWinVolumes.b50k_100k +
-        pryctoNonWinVolumes.b100k_500k +
+        pryctoNonWinVolumes.b100k_250k +
+        pryctoNonWinVolumes.b250k_500k +
         pryctoNonWinVolumes.b500k_5m +
         pryctoNonWinVolumes.b5m_plus
       : 0
@@ -516,7 +523,8 @@ export default function App() {
       b5k_20k: sum(pryctoApiBuckets.b5k_20k),
       b20k_50k: sum(pryctoApiBuckets.b20k_50k),
       b50k_100k: sum(pryctoApiBuckets.b50k_100k),
-      b100k_500k: sum(pryctoApiBuckets.b100k_500k),
+      b100k_250k: sum(pryctoApiBuckets.b100k_250k),
+      b250k_500k: sum(pryctoApiBuckets.b250k_500k),
       b500k_5m: sum(pryctoApiBuckets.b500k_5m),
       b5m_plus: sum(pryctoApiBuckets.b5m_plus),
     }
@@ -534,7 +542,8 @@ export default function App() {
       pryctoApiBuckets.b5k_20k.length +
       pryctoApiBuckets.b20k_50k.length +
       pryctoApiBuckets.b50k_100k.length +
-      pryctoApiBuckets.b100k_500k.length +
+      pryctoApiBuckets.b100k_250k.length +
+      pryctoApiBuckets.b250k_500k.length +
       pryctoApiBuckets.b500k_5m.length +
       pryctoApiBuckets.b5m_plus.length
     const totalVolume = pryctoApiVolumes
@@ -543,7 +552,8 @@ export default function App() {
         pryctoApiVolumes.b5k_20k +
         pryctoApiVolumes.b20k_50k +
         pryctoApiVolumes.b50k_100k +
-        pryctoApiVolumes.b100k_500k +
+        pryctoApiVolumes.b100k_250k +
+        pryctoApiVolumes.b250k_500k +
         pryctoApiVolumes.b500k_5m +
         pryctoApiVolumes.b5m_plus
       : 0
@@ -776,11 +786,18 @@ export default function App() {
             <td className="px-4 py-2 border-b text-right">{premiums && premiums.b50k_100k !== null ? (premiums.b50k_100k as number).toFixed(1) : '-'}</td>
           </tr>
           <tr className="odd:bg-white even:bg-gray-50">
-            <td className="px-4 py-2 border-b">100k - 500k</td>
-            <td className="px-4 py-2 border-b text-right">{buckets.b100k_500k.length.toLocaleString()}</td>
-            <td className="px-4 py-2 border-b text-right">{volumes ? `$${formatUSDCCompact(volumes.b100k_500k)}` : '$0'}</td>
-            <td className="px-4 py-2 border-b text-right">{totals && volumes && totals.totalVolume > 0 ? `${((volumes.b100k_500k / totals.totalVolume) * 100).toFixed(1)}%` : '-'}</td>
-            <td className="px-4 py-2 border-b text-right">{premiums && premiums.b100k_500k !== null ? (premiums.b100k_500k as number).toFixed(1) : '-'}</td>
+            <td className="px-4 py-2 border-b">100k - 250k</td>
+            <td className="px-4 py-2 border-b text-right">{buckets.b100k_250k.length.toLocaleString()}</td>
+            <td className="px-4 py-2 border-b text-right">{volumes ? `$${formatUSDCCompact(volumes.b100k_250k)}` : '$0'}</td>
+            <td className="px-4 py-2 border-b text-right">{totals && volumes && totals.totalVolume > 0 ? `${((volumes.b100k_250k / totals.totalVolume) * 100).toFixed(1)}%` : '-'}</td>
+            <td className="px-4 py-2 border-b text-right">{premiums && premiums.b100k_250k !== null ? (premiums.b100k_250k as number).toFixed(1) : '-'}</td>
+          </tr>
+          <tr className="odd:bg-white even:bg-gray-50">
+            <td className="px-4 py-2 border-b">250k - 500k</td>
+            <td className="px-4 py-2 border-b text-right">{buckets.b250k_500k.length.toLocaleString()}</td>
+            <td className="px-4 py-2 border-b text-right">{volumes ? `$${formatUSDCCompact(volumes.b250k_500k)}` : '$0'}</td>
+            <td className="px-4 py-2 border-b text-right">{totals && volumes && totals.totalVolume > 0 ? `${((volumes.b250k_500k / totals.totalVolume) * 100).toFixed(1)}%` : '-'}</td>
+            <td className="px-4 py-2 border-b text-right">{premiums && premiums.b250k_500k !== null ? (premiums.b250k_500k as number).toFixed(1) : '-'}</td>
           </tr>
           <tr className="odd:bg-white even:bg-gray-50">
             <td className="px-4 py-2 border-b">500k - 5m</td>
@@ -883,8 +900,8 @@ export default function App() {
           </tr>
           <tr className="odd:bg-white even:bg-gray-50">
             <td className="px-4 py-2 border-b">100k - 500k</td>
-            <td className="px-4 py-2 border-b text-right">{pryctoBuckets ? pryctoBuckets.b100k_500k.length.toLocaleString() : 0}</td>
-            <td className="px-4 py-2 border-b text-right">{pryctoApiPremiums && pryctoApiPremiums.b100k_500k !== null ? (pryctoApiPremiums.b100k_500k as number).toFixed(1) : '-'}</td>
+            <td className="px-4 py-2 border-b text-right">{pryctoBuckets ? pryctoBuckets.b100k_250k.length.toLocaleString() : 0}</td>
+            <td className="px-4 py-2 border-b text-right">{pryctoApiPremiums && pryctoApiPremiums.b100k_250k !== null ? (pryctoApiPremiums.b100k_250k as number).toFixed(1) : '-'}</td>
           </tr>
           <tr className="odd:bg-white even:bg-gray-50">
             <td className="px-4 py-2 border-b">500k - 5m</td>
@@ -991,10 +1008,10 @@ export default function App() {
           </tr>
           <tr className="odd:bg-white even:bg-gray-50">
             <td className="px-4 py-2 border-b">100k - 500k</td>
-            <td className="px-4 py-2 border-b text-right">{pryctoApiBuckets ? pryctoApiBuckets.b100k_500k.length.toLocaleString() : 0}</td>
-            <td className="px-4 py-2 border-b text-right">{pryctoApiBuckets ? (avgDeltaVsExecutionPct(toExecOnlyInput(pryctoApiBuckets.b100k_500k))?.toFixed(2) ?? '-').toString() : '-'}</td>
-            <td className="px-4 py-2 border-b text-right">{pryctoApiBuckets ? (avgDeltaWethPrice(toMarketOnlyInput(pryctoApiBuckets.b100k_500k))?.toFixed(2) ?? '-').toString() : '-'}</td>
-            <td className="px-4 py-2 border-b text-right">{pryctoApiBuckets ? (avgDeltaExecVsMarketPct(toExecVsMarketInput(pryctoApiBuckets.b100k_500k))?.toFixed(2) ?? '-').toString() : '-'}</td>
+            <td className="px-4 py-2 border-b text-right">{pryctoApiBuckets ? pryctoApiBuckets.b100k_250k.length.toLocaleString() : 0}</td>
+            <td className="px-4 py-2 border-b text-right">{pryctoApiBuckets ? (avgDeltaVsExecutionPct(toExecOnlyInput(pryctoApiBuckets.b100k_250k))?.toFixed(2) ?? '-').toString() : '-'}</td>
+            <td className="px-4 py-2 border-b text-right">{pryctoApiBuckets ? (avgDeltaWethPrice(toMarketOnlyInput(pryctoApiBuckets.b100k_250k))?.toFixed(2) ?? '-').toString() : '-'}</td>
+            <td className="px-4 py-2 border-b text-right">{pryctoApiBuckets ? (avgDeltaExecVsMarketPct(toExecVsMarketInput(pryctoApiBuckets.b100k_250k))?.toFixed(2) ?? '-').toString() : '-'}</td>
           </tr>
           <tr className="odd:bg-white even:bg-gray-50">
             <td className="px-4 py-2 border-b">500k - 5m</td>
@@ -1070,11 +1087,11 @@ export default function App() {
               </tr>
               <tr className="odd:bg-white even:bg-gray-50">
                 <td className="px-4 py-2 border-b">100k - 500k</td>
-                <td className="px-4 py-2 border-b text-right">{pryctoApiBuckets.b100k_500k.length.toLocaleString()}</td>
-                <td className="px-4 py-2 border-b text-right">{pryctoApiVolumes ? `$${formatUSDCCompact(pryctoApiVolumes.b100k_500k)}` : '$0'}</td>
-                <td className="px-4 py-2 border-b text-right">{pryctoApiTotals && pryctoApiVolumes && pryctoApiTotals.totalVolume > 0 ? `${((pryctoApiVolumes.b100k_500k / pryctoApiTotals.totalVolume) * 100).toFixed(1)}%` : '-'}</td>
-                <td className="px-4 py-2 border-b text-right">{(avgPryctoPremiumBps(toMarketOnlyInput(pryctoApiBuckets.b100k_500k))?.toFixed(1) ?? '-').toString()}</td>
-                <td className="px-4 py-2 border-b text-right">{(avgExecPremiumBps(toExecVsMarketInput(pryctoApiBuckets.b100k_500k))?.toFixed(1) ?? '-').toString()}</td>
+                <td className="px-4 py-2 border-b text-right">{pryctoApiBuckets.b100k_250k.length.toLocaleString()}</td>
+                <td className="px-4 py-2 border-b text-right">{pryctoApiVolumes ? `$${formatUSDCCompact(pryctoApiVolumes.b100k_250k)}` : '$0'}</td>
+                <td className="px-4 py-2 border-b text-right">{pryctoApiTotals && pryctoApiVolumes && pryctoApiTotals.totalVolume > 0 ? `${((pryctoApiVolumes.b100k_250k / pryctoApiTotals.totalVolume) * 100).toFixed(1)}%` : '-'}</td>
+                <td className="px-4 py-2 border-b text-right">{(avgPryctoPremiumBps(toMarketOnlyInput(pryctoApiBuckets.b100k_250k))?.toFixed(1) ?? '-').toString()}</td>
+                <td className="px-4 py-2 border-b text-right">{(avgExecPremiumBps(toExecVsMarketInput(pryctoApiBuckets.b100k_250k))?.toFixed(1) ?? '-').toString()}</td>
               </tr>
               <tr className="odd:bg-white even:bg-gray-50">
                 <td className="px-4 py-2 border-b">500k - 5m</td>
@@ -1149,10 +1166,10 @@ export default function App() {
               </tr>
               <tr className="odd:bg-white even:bg-gray-50">
                 <td className="px-4 py-2 border-b">100k - 500k</td>
-                <td className="px-4 py-2 border-b text-right">{pryctoNonWinBuckets.b100k_500k.length.toLocaleString()}</td>
-                <td className="px-4 py-2 border-b text-right">{pryctoNonWinVolumes ? `$${formatUSDCCompact(pryctoNonWinVolumes.b100k_500k)}` : '$0'}</td>
-                <td className="px-4 py-2 border-b text-right">{pryctoNonWinTotals && pryctoNonWinVolumes && pryctoNonWinTotals.totalVolume > 0 ? `${((pryctoNonWinVolumes.b100k_500k / pryctoNonWinTotals.totalVolume) * 100).toFixed(1)}%` : '-'}</td>
-                <td className="px-4 py-2 border-b text-right">{(() => { const v = avgPryctoBidBuyOverWinnerBuy(pryctoNonWinBuckets.b100k_500k, PRYCTO_ADDRESS); return v === null ? '-' : truncateToDecimals(v, 6) })()}</td>
+                <td className="px-4 py-2 border-b text-right">{pryctoNonWinBuckets.b100k_250k.length.toLocaleString()}</td>
+                <td className="px-4 py-2 border-b text-right">{pryctoNonWinVolumes ? `$${formatUSDCCompact(pryctoNonWinVolumes.b100k_250k)}` : '$0'}</td>
+                <td className="px-4 py-2 border-b text-right">{pryctoNonWinTotals && pryctoNonWinVolumes && pryctoNonWinTotals.totalVolume > 0 ? `${((pryctoNonWinVolumes.b100k_250k / pryctoNonWinTotals.totalVolume) * 100).toFixed(1)}%` : '-'}</td>
+                <td className="px-4 py-2 border-b text-right">{(() => { const v = avgPryctoBidBuyOverWinnerBuy(pryctoNonWinBuckets.b100k_250k, PRYCTO_ADDRESS); return v === null ? '-' : truncateToDecimals(v, 6) })()}</td>
               </tr>
               <tr className="odd:bg-white even:bg-gray-50">
                 <td className="px-4 py-2 border-b">500k - 5m</td>
