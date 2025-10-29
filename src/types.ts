@@ -46,4 +46,6 @@ export type PryctoPricingMetadata = {
   marginBps?: number;
   quotedAtMs?: number;
   priceOffered?: number;
+  sellTokenInUSDBinanceAtQuoted?: number;
+  buyTokenInUSDBinanceAtQuoted?: number;
 }
