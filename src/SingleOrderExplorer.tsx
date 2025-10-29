@@ -276,7 +276,7 @@ export default function SingleOrderExplorer() {
                     })()}</div>
                   </div>
                   <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.5rem 0.75rem', minWidth: 240 }}>
-                    <div title={'Raw values as quoted by Prycto at quote time.\nImplied price = amountInHuman / otherAmountHuman.'}>Raw Prycto data</div>
+                    <div title={'Raw values as quoted by Prycto at quote time.\nImplied price = otherAmountHuman / amountInHuman (sell in buy).'}>Raw Prycto data</div>
                     <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>amountInHuman</div>
                     <div>{(() => {
                       const meta = document.pryctoPricingMetadata as { amountInHuman?: number }
@@ -293,29 +293,31 @@ export default function SingleOrderExplorer() {
                       const s = (v as number).toFixed(8).replace(/\.0+$/, '').replace(/(\.[0-9]*?)0+$/, '$1')
                       return s
                     })()}</div>
-                    <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>implied price</div>
+                    <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>implied price (sell/buy)</div>
                     <div>{(() => {
                       const meta = document.pryctoPricingMetadata as { amountInHuman?: number; otherAmountHuman?: number }
                       const a = typeof meta?.amountInHuman === 'number' ? meta.amountInHuman : null
                       const b = typeof meta?.otherAmountHuman === 'number' ? meta.otherAmountHuman : null
-                      if (a === null || b === null || b === 0) return '-'
-                      const p = a / b
+                      if (a === null || b === null || a === 0) return '-'
+                      const p = b / a
                       const s = p.toFixed(8).replace(/\.0+$/, '').replace(/(\.[0-9]*?)0+$/, '$1')
                       return s
                     })()}</div>
                   </div>
                   <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.5rem 0.75rem', minWidth: 240 }}>
-                    <div title={'Buy token USD price references.\nExecution = buyTokenInUSD at block time.\nQuote = buyTokenInUSDBinanceAtQuoted from Prycto metadata.'}>Market data</div>
-                    <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Buy token at execution (USD)</div>
+                    <div title={'Market prices oriented as sellToken priced in buyToken (sell/buy).\nExecution = buyTokenInUSD / sellTokenInUSD.\nQuote = buyTokenInUSDBinanceAtQuoted / sellTokenInUSDBinanceAtQuoted.'}>Market data</div>
+                    <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Market at execution (sell/buy)</div>
                     <div>{(() => {
-                      const px = Number((document.binancePrices as { buyTokenInUSD?: number } | undefined)?.buyTokenInUSD)
-                      return Number.isFinite(px) ? px.toFixed(6) : '-'
+                      const buy = 1 / Number((document.binancePrices as { buyTokenInUSD?: number } | undefined)?.buyTokenInUSD)
+                      if (!Number.isFinite(buy)) return '-'
+                      return buy.toFixed(8).replace(/\.0+$/, '').replace(/(\.[0-9]*?)0+$/, '$1')
                     })()}</div>
-                    <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>Buy token at quote (USD)</div>
+                    <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>Market at quote (sell/buy)</div>
                     <div>{(() => {
-                      const meta = document.pryctoPricingMetadata as { buyTokenInUSDBinanceAtQuoted?: number } | undefined
-                      const px = typeof meta?.buyTokenInUSDBinanceAtQuoted === 'number' ? meta!.buyTokenInUSDBinanceAtQuoted : null
-                      return px === null ? '-' : (px as number).toFixed(6)
+                      const buyQ = (typeof document.pryctoPricingMetadata?.buyTokenInUSDBinanceAtQuoted === 'number' ? document.pryctoPricingMetadata.buyTokenInUSDBinanceAtQuoted : null) as number | null
+                      if (buyQ === null) return '-'
+                      const buyQInv = 1 / buyQ
+                      return buyQInv.toFixed(8).replace(/\.0+$/, '').replace(/(\.[0-9]*?)0+$/, '$1')
                     })()}</div>
                   </div>
                   <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.5rem 0.75rem', minWidth: 200 }}>
@@ -326,7 +328,7 @@ export default function SingleOrderExplorer() {
                       const v = typeof meta?.marginBps === 'number' ? meta.marginBps : null
                       return v === null ? '-' : `${v} bps`
                     })()}</div>
-                    <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>priceOffered (aligned buy/sell)</div>
+                    <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>priceOffered (aligned sell/buy)</div>
                     <div>{(() => {
                       const meta = document.pryctoPricingMetadata as { priceOffered?: number; amountInHuman?: number; otherAmountHuman?: number }
                       const offered = typeof meta?.priceOffered === 'number' ? meta.priceOffered : null
@@ -336,7 +338,7 @@ export default function SingleOrderExplorer() {
                       // Align offered to buy-per-sell orientation if quote data available
                       let aligned = offered
                       if (a !== null && b !== null && a !== 0 && b !== 0) {
-                        const implied = a / b
+                        const implied = b / a
                         const relOffered = Math.abs((offered - implied) / implied)
                         const inv = offered !== 0 ? 1 / offered : NaN
                         const relInv = Number.isFinite(inv) && implied !== 0 ? Math.abs((inv - implied) / implied) : Number.POSITIVE_INFINITY
@@ -352,7 +354,7 @@ export default function SingleOrderExplorer() {
                       const a = typeof meta?.amountInHuman === 'number' ? meta.amountInHuman : null
                       const b = typeof meta?.otherAmountHuman === 'number' ? meta.otherAmountHuman : null
                       if (offered === null || a === null || b === null || a === 0 || b === 0) return '-'
-                      const implied = a / b
+                      const implied = b / a
                       // Align offered (invert if closer) to buy-per-sell before diff
                       const inv = offered !== 0 ? 1 / offered : NaN
                       const relOffered = Math.abs((offered - implied) / implied)
@@ -369,12 +371,11 @@ export default function SingleOrderExplorer() {
                       const a = typeof meta?.amountInHuman === 'number' ? meta.amountInHuman : null
                       const b = typeof meta?.otherAmountHuman === 'number' ? meta.otherAmountHuman : null
                       const buyExec = Number((document.binancePrices as { buyTokenInUSD?: number } | undefined)?.buyTokenInUSD)
-                      const sellExec = Number((document.binancePrices as { sellTokenInUSD?: number } | undefined)?.sellTokenInUSD)
                       if (offered === null || a === null || b === null || a === 0 || b === 0) return '-'
-                      if (!Number.isFinite(buyExec) || !Number.isFinite(sellExec) || buyExec === 0) return '-'
-                      const marketExec = sellExec / buyExec // buy per sell
+                      if (!Number.isFinite(buyExec) || buyExec === 0) return '-'
+                      const marketExec = 1 / buyExec // sell in buy, per user's display
                       const inv = offered !== 0 ? 1 / offered : NaN
-                      const implied = a / b
+                      const implied = b / a
                       const relOff = Math.abs((offered - implied) / implied)
                       const relInv = Number.isFinite(inv) ? Math.abs((inv - implied) / implied) : Number.POSITIVE_INFINITY
                       const offeredAligned = relInv < relOff && Number.isFinite(inv) ? inv : offered
@@ -383,17 +384,16 @@ export default function SingleOrderExplorer() {
                     })()}</div>
                     <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>Δ vs market at quote (bps)</div>
                     <div>{(() => {
-                      const meta = document.pryctoPricingMetadata as { priceOffered?: number; amountInHuman?: number; otherAmountHuman?: number; buyTokenInUSDBinanceAtQuoted?: number; sellTokenInUSDBinanceAtQuoted?: number }
+                      const meta = document.pryctoPricingMetadata as { priceOffered?: number; amountInHuman?: number; otherAmountHuman?: number; buyTokenInUSDBinanceAtQuoted?: number }
                       const offered = typeof meta?.priceOffered === 'number' ? meta.priceOffered : null
                       const a = typeof meta?.amountInHuman === 'number' ? meta.amountInHuman : null
                       const b = typeof meta?.otherAmountHuman === 'number' ? meta.otherAmountHuman : null
                       const buyQ = typeof meta?.buyTokenInUSDBinanceAtQuoted === 'number' ? meta.buyTokenInUSDBinanceAtQuoted : null
-                      const sellQ = typeof meta?.sellTokenInUSDBinanceAtQuoted === 'number' ? meta.sellTokenInUSDBinanceAtQuoted : null
                       if (offered === null || a === null || b === null || a === 0 || b === 0) return '-'
-                      if (buyQ === null || sellQ === null || buyQ === 0) return '-'
-                      const marketQ = sellQ / buyQ // buy per sell
+                      if (buyQ === null || buyQ === 0) return '-'
+                      const marketQ = 1 / (buyQ as number) // sell in buy, per user's display
                       const inv = offered !== 0 ? 1 / offered : NaN
-                      const implied = a / b
+                      const implied = b / a
                       const relOff = Math.abs((offered - implied) / implied)
                       const relInv = Number.isFinite(inv) ? Math.abs((inv - implied) / implied) : Number.POSITIVE_INFINITY
                       const offeredAligned = relInv < relOff && Number.isFinite(inv) ? inv : offered
