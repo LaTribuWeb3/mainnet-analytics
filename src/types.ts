@@ -23,9 +23,10 @@ export interface TradeDocument {
   cowswapFeeAmount: bigint;
   competitionData?: CompetitionData
   pryctoApiPrice?: number
+  pryctoPricingMetadata?: PryctoPricingMetadata
   binancePrices?: BinancePrices
   // Derived/optional analytics fields (computed client-side)
-  buyUsdcPrice?: number
+  buyUsdcPrice?: number 
   sellUsdcPrice?: number
   orderSellValueUsd?: number | string
   orderBuyValueUsd?: number | string
@@ -39,3 +40,10 @@ export interface TradesApiResponse {
 }
 
 
+export type PryctoPricingMetadata = {
+  amountInHuman?: number;
+  otherAmountHuman?: number;
+  marginBps?: number;
+  quotedAtMs?: number;
+  priceOffered?: number;
+}

@@ -27,6 +27,7 @@ type ApiItem = {
     winner?: boolean
   }>
   binancePrices?: TradeDocument['binancePrices']
+  pryctoPricingMetadata?: TradeDocument['pryctoPricingMetadata']
 }
 
 type ApiResponse = {
@@ -58,6 +59,7 @@ function mapApiItemToTradeDocument(item: ApiItem): TradeDocument {
     cowswapFeeAmount: BigInt(String(item.cowswapFeeAmount ?? '0')),
     competitionData: bids.length > 0 ? { bidData: bids } : undefined,
     binancePrices: item.binancePrices,
+    pryctoPricingMetadata: item.pryctoPricingMetadata,
   }
 }
 
@@ -486,6 +488,9 @@ export default function TradesPage() {
                               <th className="px-2 py-1 text-left text-xs font-semibold text-gray-700 border-b">Sell bid</th>
                               <th className="px-2 py-1 text-left text-xs font-semibold text-gray-700 border-b">Buy bid</th>
                               <th className="px-2 py-1 text-right text-xs font-semibold text-gray-700 border-b">Δ vs winner (bps)</th>
+                              <th className="px-2 py-1 text-right text-xs font-semibold text-gray-700 border-b">Δ vs market (bps)</th>
+                              <th className="px-2 py-1 text-right text-xs font-semibold text-gray-700 border-b">Δ vs quoted (bps)</th>
+                              <th className="px-2 py-1 text-right text-xs font-semibold text-gray-700 border-b">Δ vs offered (bps)</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -508,6 +513,32 @@ export default function TradesPage() {
                                 const deltaBps = winnerBuy && winnerBuy !== 0
                                   ? (((bidBuy - winnerBuy) / winnerBuy) * 10000)
                                   : null
+                                // Compute Δ vs market (bps): compare bid-implied USDC per sell token vs market USDC per sell token
+                                const sellQty = Number(normalizeAmount(b.sellAmount, d.sellToken))
+                                const buyQty = Number(normalizeAmount(b.buyAmount, d.buyToken))
+                                const buyUsdc = Number((d.binancePrices as { buyTokenInUSD?: number } | undefined)?.buyTokenInUSD)
+                                const marketUsdcPerSell = Number((d.binancePrices as { sellTokenInUSD?: number } | undefined)?.sellTokenInUSD)
+                                const impliedUsdcPerSell = Number.isFinite(buyUsdc) && sellQty !== 0 ? (buyUsdc * (buyQty / sellQty)) : NaN
+                                const deltaMarketBps = Number.isFinite(impliedUsdcPerSell) && Number.isFinite(marketUsdcPerSell) && marketUsdcPerSell !== 0
+                                  ? ((impliedUsdcPerSell - marketUsdcPerSell) / marketUsdcPerSell) * 10000
+                                  : null
+                                const isPryctoRow = ((b.solverAddress || '').toLowerCase() === PRYCTO_ADDRESS)
+                                const meta = d.pryctoPricingMetadata
+                                const quotedRatioBuyPerSell = meta && Number.isFinite(meta.amountInHuman as number) && Number.isFinite(meta.otherAmountHuman as number) && (meta.otherAmountHuman as number) !== 0
+                                  ? ((meta.amountInHuman as number) / (meta.otherAmountHuman as number))
+                                  : NaN
+                                const quotedUsdcPerSell = Number.isFinite(buyUsdc) && Number.isFinite(quotedRatioBuyPerSell)
+                                  ? (buyUsdc * quotedRatioBuyPerSell)
+                                  : NaN
+                                const offeredUsdcPerSell = meta && Number.isFinite(meta.priceOffered as number)
+                                  ? (meta.priceOffered as number)
+                                  : NaN
+                                const deltaQuotedBps = isPryctoRow && Number.isFinite(quotedUsdcPerSell) && Number.isFinite(marketUsdcPerSell) && marketUsdcPerSell !== 0
+                                  ? ((quotedUsdcPerSell - marketUsdcPerSell) / marketUsdcPerSell) * 10000
+                                  : null
+                                const deltaOfferedBps = isPryctoRow && Number.isFinite(offeredUsdcPerSell) && Number.isFinite(marketUsdcPerSell) && marketUsdcPerSell !== 0
+                                  ? ((offeredUsdcPerSell - marketUsdcPerSell) / marketUsdcPerSell) * 10000
+                                  : null
                                 return (
                                   <tr
                                     key={`${d._id}-bid-${idx}`}
@@ -520,6 +551,9 @@ export default function TradesPage() {
                                     <td className="px-2 py-1 border-b">{formatTokenAmount(b.sellAmount, d.sellToken)}</td>
                                     <td className="px-2 py-1 border-b">{formatTokenAmount(b.buyAmount, d.buyToken)}</td>
                                     <td className="px-2 py-1 border-b text-right">{deltaBps === null ? '-' : deltaBps.toFixed(1)}</td>
+                                    <td className="px-2 py-1 border-b text-right">{deltaMarketBps === null ? '-' : deltaMarketBps.toFixed(1)}</td>
+                                    <td className="px-2 py-1 border-b text-right">{!isPryctoRow || deltaQuotedBps === null ? '-' : deltaQuotedBps.toFixed(1)}</td>
+                                    <td className="px-2 py-1 border-b text-right">{!isPryctoRow || deltaOfferedBps === null ? '-' : deltaOfferedBps.toFixed(1)}</td>
                                   </tr>
                                 )
                               })
