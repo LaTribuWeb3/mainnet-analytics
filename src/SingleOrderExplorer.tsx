@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import type { BidDatum, TradeDocument, TradesApiResponse } from './types'
 import { normalizeAmount } from './utils/price'
 import { formatCompactTruncate } from './utils/format'
-import { solverLabel } from './utils/solvers'
+ 
 
 const API_PATH = '/trades'
 
@@ -73,7 +73,7 @@ export default function SingleOrderExplorer() {
   const [idType, setIdType] = useState<'orderUid' | 'transactionHash'>(initialTx ? 'transactionHash' : 'orderUid')
   const [orderUid, setOrderUid] = useState<string>(initialTx || initialUid)
 
-  const PRYCTO_ADDRESS = '0xa97851357e99082762c972f794b2a29e629511a7'
+  
 
   useEffect(() => {
     if (!orderUid) {
@@ -103,11 +103,9 @@ export default function SingleOrderExplorer() {
           ? (json as TradesApiResponse).documents
           : []
         const mapped = (items as ApiItem[]).map(mapApiItemToTradeDocument)
-        try {
-          console.log('SingleOrderExplorer API url', url.toString())
-          console.log('SingleOrderExplorer order (raw)', (items as ApiItem[])[0])
-          console.log('SingleOrderExplorer order (mapped)', mapped[0])
-        } catch {}
+        console.log('SingleOrderExplorer API url', url.toString())
+        console.log('SingleOrderExplorer order (raw)', (items as ApiItem[])[0])
+        console.log('SingleOrderExplorer order (mapped)', mapped[0])
         setDocument(mapped[0] || null)
       } catch (e) {
         if ((e as { name?: string } | null)?.name === 'AbortError') return
@@ -132,7 +130,7 @@ export default function SingleOrderExplorer() {
     }
     const differs = (idType === 'orderUid' ? currentUid : currentTx) !== (orderUid || '') || (idType === 'orderUid' ? !!currentTx : !!currentUid)
     if (differs) setSearchParams(next)
-  }, [orderUid, idType])
+  }, [orderUid, idType, searchParams, setSearchParams])
 
   function truncate6(value: string): string {
     return value.length <= 6 ? value : value.slice(0, 6)
@@ -363,6 +361,44 @@ export default function SingleOrderExplorer() {
                       if (!Number.isFinite(implied) || implied === 0) return '-'
                       const bps = ((offeredAligned - implied) / implied) * 10000
                       return bps.toFixed(1)
+                    })()}</div>
+                    <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>Δ vs market at execution (bps)</div>
+                    <div>{(() => {
+                      const meta = document.pryctoPricingMetadata as { priceOffered?: number; amountInHuman?: number; otherAmountHuman?: number }
+                      const offered = typeof meta?.priceOffered === 'number' ? meta.priceOffered : null
+                      const a = typeof meta?.amountInHuman === 'number' ? meta.amountInHuman : null
+                      const b = typeof meta?.otherAmountHuman === 'number' ? meta.otherAmountHuman : null
+                      const buyExec = Number((document.binancePrices as { buyTokenInUSD?: number } | undefined)?.buyTokenInUSD)
+                      const sellExec = Number((document.binancePrices as { sellTokenInUSD?: number } | undefined)?.sellTokenInUSD)
+                      if (offered === null || a === null || b === null || a === 0 || b === 0) return '-'
+                      if (!Number.isFinite(buyExec) || !Number.isFinite(sellExec) || buyExec === 0) return '-'
+                      const marketExec = sellExec / buyExec // buy per sell
+                      const inv = offered !== 0 ? 1 / offered : NaN
+                      const implied = a / b
+                      const relOff = Math.abs((offered - implied) / implied)
+                      const relInv = Number.isFinite(inv) ? Math.abs((inv - implied) / implied) : Number.POSITIVE_INFINITY
+                      const offeredAligned = relInv < relOff && Number.isFinite(inv) ? inv : offered
+                      const bps = ((offeredAligned - marketExec) / marketExec) * 10000
+                      return Number.isFinite(bps) ? bps.toFixed(1) : '-'
+                    })()}</div>
+                    <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>Δ vs market at quote (bps)</div>
+                    <div>{(() => {
+                      const meta = document.pryctoPricingMetadata as { priceOffered?: number; amountInHuman?: number; otherAmountHuman?: number; buyTokenInUSDBinanceAtQuoted?: number; sellTokenInUSDBinanceAtQuoted?: number }
+                      const offered = typeof meta?.priceOffered === 'number' ? meta.priceOffered : null
+                      const a = typeof meta?.amountInHuman === 'number' ? meta.amountInHuman : null
+                      const b = typeof meta?.otherAmountHuman === 'number' ? meta.otherAmountHuman : null
+                      const buyQ = typeof meta?.buyTokenInUSDBinanceAtQuoted === 'number' ? meta.buyTokenInUSDBinanceAtQuoted : null
+                      const sellQ = typeof meta?.sellTokenInUSDBinanceAtQuoted === 'number' ? meta.sellTokenInUSDBinanceAtQuoted : null
+                      if (offered === null || a === null || b === null || a === 0 || b === 0) return '-'
+                      if (buyQ === null || sellQ === null || buyQ === 0) return '-'
+                      const marketQ = sellQ / buyQ // buy per sell
+                      const inv = offered !== 0 ? 1 / offered : NaN
+                      const implied = a / b
+                      const relOff = Math.abs((offered - implied) / implied)
+                      const relInv = Number.isFinite(inv) ? Math.abs((inv - implied) / implied) : Number.POSITIVE_INFINITY
+                      const offeredAligned = relInv < relOff && Number.isFinite(inv) ? inv : offered
+                      const bps = ((offeredAligned - marketQ) / marketQ) * 10000
+                      return Number.isFinite(bps) ? bps.toFixed(1) : '-'
                     })()}</div>
                   </div>
                 </div>
