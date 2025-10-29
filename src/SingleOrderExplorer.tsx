@@ -307,22 +307,44 @@ export default function SingleOrderExplorer() {
                     })()}</div>
                   </div>
                   <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.5rem 0.75rem', minWidth: 240 }}>
-                    <div>Additional card</div>
-                    <div style={{ color: '#6b7280' }}>Placeholder — we will add content here.</div>
+                    <div title={'Buy token USD price references.\nExecution = buyTokenInUSD at block time.\nQuote = buyTokenInUSDBinanceAtQuoted from Prycto metadata.'}>Market data</div>
+                    <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Buy token at execution (USD)</div>
+                    <div>{(() => {
+                      const px = Number((document.binancePrices as { buyTokenInUSD?: number } | undefined)?.buyTokenInUSD)
+                      return Number.isFinite(px) ? px.toFixed(6) : '-'
+                    })()}</div>
+                    <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>Buy token at quote (USD)</div>
+                    <div>{(() => {
+                      const meta = document.pryctoPricingMetadata as { buyTokenInUSDBinanceAtQuoted?: number } | undefined
+                      const px = typeof meta?.buyTokenInUSDBinanceAtQuoted === 'number' ? meta!.buyTokenInUSDBinanceAtQuoted : null
+                      return px === null ? '-' : (px as number).toFixed(6)
+                    })()}</div>
                   </div>
                   <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.5rem 0.75rem', minWidth: 200 }}>
-                    <div>Solver Configured Margin</div>
+                    <div>Solver Data:</div>
+                    <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>Solver Configured Margin</div>
                     <div>{(() => {
                       const meta = document.pryctoPricingMetadata as { marginBps?: number }
                       const v = typeof meta?.marginBps === 'number' ? meta.marginBps : null
                       return v === null ? '-' : `${v} bps`
                     })()}</div>
-                    <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>priceOffered</div>
+                    <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>priceOffered (aligned buy/sell)</div>
                     <div>{(() => {
-                      const meta = document.pryctoPricingMetadata as { priceOffered?: number }
-                      const v = typeof meta?.priceOffered === 'number' ? meta.priceOffered : null
-                      if (v === null) return '-'
-                      const s = (v as number).toFixed(8).replace(/\.0+$/, '').replace(/(\.[0-9]*?)0+$/, '$1')
+                      const meta = document.pryctoPricingMetadata as { priceOffered?: number; amountInHuman?: number; otherAmountHuman?: number }
+                      const offered = typeof meta?.priceOffered === 'number' ? meta.priceOffered : null
+                      const a = typeof meta?.amountInHuman === 'number' ? meta.amountInHuman : null
+                      const b = typeof meta?.otherAmountHuman === 'number' ? meta.otherAmountHuman : null
+                      if (offered === null) return '-'
+                      // Align offered to buy-per-sell orientation if quote data available
+                      let aligned = offered
+                      if (a !== null && b !== null && a !== 0 && b !== 0) {
+                        const implied = a / b
+                        const relOffered = Math.abs((offered - implied) / implied)
+                        const inv = offered !== 0 ? 1 / offered : NaN
+                        const relInv = Number.isFinite(inv) && implied !== 0 ? Math.abs((inv - implied) / implied) : Number.POSITIVE_INFINITY
+                        aligned = relInv < relOffered && Number.isFinite(inv) ? inv : offered
+                      }
+                      const s = aligned.toFixed(8).replace(/\.0+$/, '').replace(/(\.[0-9]*?)0+$/, '$1')
                       return s
                     })()}</div>
                     <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>Δ vs implied (bps)</div>
@@ -332,13 +354,14 @@ export default function SingleOrderExplorer() {
                       const a = typeof meta?.amountInHuman === 'number' ? meta.amountInHuman : null
                       const b = typeof meta?.otherAmountHuman === 'number' ? meta.otherAmountHuman : null
                       if (offered === null || a === null || b === null || a === 0 || b === 0) return '-'
-                      const implied1 = a / b
-                      const implied2 = b / a
-                      const rel1 = Number.isFinite(implied1) && implied1 !== 0 ? Math.abs((offered - implied1) / implied1) : Number.POSITIVE_INFINITY
-                      const rel2 = Number.isFinite(implied2) && implied2 !== 0 ? Math.abs((offered - implied2) / implied2) : Number.POSITIVE_INFINITY
-                      const impliedAligned = rel1 <= rel2 ? implied1 : implied2
-                      if (!Number.isFinite(impliedAligned) || impliedAligned === 0) return '-'
-                      const bps = ((offered - impliedAligned) / impliedAligned) * 10000
+                      const implied = a / b
+                      // Align offered (invert if closer) to buy-per-sell before diff
+                      const inv = offered !== 0 ? 1 / offered : NaN
+                      const relOffered = Math.abs((offered - implied) / implied)
+                      const relInv = Number.isFinite(inv) ? Math.abs((inv - implied) / implied) : Number.POSITIVE_INFINITY
+                      const offeredAligned = relInv < relOffered && Number.isFinite(inv) ? inv : offered
+                      if (!Number.isFinite(implied) || implied === 0) return '-'
+                      const bps = ((offeredAligned - implied) / implied) * 10000
                       return bps.toFixed(1)
                     })()}</div>
                   </div>
