@@ -332,6 +332,7 @@ export default function TradesPage() {
             <Link to="/">Home</Link>
             <Link to="/trades">Trades</Link>
             <Link to="/competition">Competition</Link>
+            <Link to="/order">Order</Link>
           </nav>
           <div />
         </div>
