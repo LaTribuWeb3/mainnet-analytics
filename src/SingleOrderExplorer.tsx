@@ -103,6 +103,11 @@ export default function SingleOrderExplorer() {
           ? (json as TradesApiResponse).documents
           : []
         const mapped = (items as ApiItem[]).map(mapApiItemToTradeDocument)
+        try {
+          console.log('SingleOrderExplorer API url', url.toString())
+          console.log('SingleOrderExplorer order (raw)', (items as ApiItem[])[0])
+          console.log('SingleOrderExplorer order (mapped)', mapped[0])
+        } catch {}
         setDocument(mapped[0] || null)
       } catch (e) {
         if ((e as { name?: string } | null)?.name === 'AbortError') return
@@ -225,7 +230,29 @@ export default function SingleOrderExplorer() {
 
             <h2 style={{ marginTop: '1rem', marginBottom: '0.5rem', fontWeight: 600 }}>Order overview</h2>
             <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.75rem 1rem', marginBottom: '0.75rem' }}>
-              <div style={{ color: '#6b7280' }}>Overview cards will appear here.</div>
+              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.5rem 0.75rem' }}>
+                  <div>Sell</div>
+                  <div>{formatTokenAmount(document.sellAmount, document.sellToken)}</div>
+                  <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>{document.sellAmount}</div>
+                </div>
+                <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.5rem 0.75rem' }}>
+                  <div>Buy token target</div>
+                  <div>{tokenSymbol(document.buyToken)}</div>
+                </div>
+                <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.5rem 0.75rem' }}>
+                  <div>Obtained</div>
+                  <div>{(() => {
+                    const winner = document.competitionData?.bidData?.find?.((b) => b?.winner)
+                    if (!winner) return '-'
+                    return formatTokenAmount(winner.buyAmount, document.buyToken)
+                  })()}</div>
+                  <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>{(() => {
+                    const winner = document.competitionData?.bidData?.find?.((b) => b?.winner)
+                    return winner ? winner.buyAmount : '-'
+                  })()}</div>
+                </div>
+              </div>
             </div>
 
             <h2 style={{ marginTop: '1rem', marginBottom: '0.5rem', fontWeight: 600 }}>Prycto Parameters</h2>
@@ -278,6 +305,10 @@ export default function SingleOrderExplorer() {
                       const s = p.toFixed(8).replace(/\.0+$/, '').replace(/(\.[0-9]*?)0+$/, '$1')
                       return s
                     })()}</div>
+                  </div>
+                  <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.5rem 0.75rem', minWidth: 240 }}>
+                    <div>Additional card</div>
+                    <div style={{ color: '#6b7280' }}>Placeholder — we will add content here.</div>
                   </div>
                   <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.5rem 0.75rem', minWidth: 200 }}>
                     <div>Solver Configured Margin</div>
