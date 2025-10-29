@@ -664,6 +664,7 @@ export default function App() {
             <Link to="/">Home</Link>
             <Link to="/trades">Trades</Link>
             <Link to="/competition">Competition</Link>
+            <Link to="/order">Order</Link>
           </nav>
         </div>
       </div>
@@ -681,6 +682,7 @@ export default function App() {
             <Link to="/">Home</Link>
             <Link to="/trades">Trades</Link>
             <Link to="/competition">Competition</Link>
+            <Link to="/order">Order</Link>
           </nav>
         </div>
       </div>
