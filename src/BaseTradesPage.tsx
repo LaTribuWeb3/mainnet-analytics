@@ -139,6 +139,16 @@ function formatUsdValue(raw: string, token: string, tokenLookup: Record<string, 
   return `$${formatCompactTruncate(usd as number, 2)}`
 }
 
+function formatUsdNumber(n: number): string {
+  if (!Number.isFinite(n)) return '—'
+  return `$${formatCompactTruncate(n, 2)}`
+}
+
+function formatPct(n: number): string {
+  if (!Number.isFinite(n)) return '—'
+  return `${(n * 100).toFixed(1)}%`
+}
+
 function rankDisplay(rank: number | null, total: number): string {
   if (rank === null) return '—'
   return `#${rank}/${total}`
@@ -217,6 +227,31 @@ export default function BaseTradesPage() {
       return sellOk && buyOk
     })
   }, [trades, sellTokenFilter, buyTokenFilter, tokenLookup])
+
+  const stats = useMemo(() => {
+    const totalRows = filtered.length
+    let totalVolume = 0
+    let pryctoVolumeWon = 0
+    let pryctoParticipations = 0
+    let pryctoWins = 0
+    for (const t of filtered) {
+      const vol = Number.isFinite(t.sellUsd as number) ? (t.sellUsd as number) : 0
+      totalVolume += vol
+      const bids = t.competitionData?.bidData || []
+      const hasPrycto = bids.some((b) => (b.solverAddress || '').toLowerCase() === TARGET_SOLVER)
+      if (hasPrycto) pryctoParticipations += 1
+      const winner = bids.find((b) => b.winner)
+      const isPryctoWin = !!winner && (winner.solverAddress || '').toLowerCase() === TARGET_SOLVER
+      if (isPryctoWin) {
+        pryctoWins += 1
+        pryctoVolumeWon += vol
+      }
+    }
+    const participationRate = totalRows > 0 ? pryctoParticipations / totalRows : 0
+    const winRate = pryctoParticipations > 0 ? pryctoWins / pryctoParticipations : 0
+    const volumeShare = totalVolume > 0 ? pryctoVolumeWon / totalVolume : 0
+    return { totalRows, totalVolume, pryctoVolumeWon, pryctoParticipations, pryctoWins, participationRate, winRate, volumeShare }
+  }, [filtered])
 
   const sorted = useMemo(() => {
     const arr = [...filtered]
@@ -309,6 +344,27 @@ export default function BaseTradesPage() {
           Loaded {trades.length.toLocaleString()} trades from <code>base-trades.ndjson</code>. Click a row to see full competition bids. Rank column shows
           position of solver {solverLabel(TARGET_SOLVER)} ({TARGET_SOLVER.slice(0, 6)}…{TARGET_SOLVER.slice(-4)}) when bids are sorted by buyAmount (highest first).
         </p>
+        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+          <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.5rem 0.75rem', minWidth: 180 }}>
+            <div>Total volume (USD)</div>
+            <div style={{ fontWeight: 600 }}>{formatUsdNumber(stats.totalVolume)}</div>
+          </div>
+          <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.5rem 0.75rem', minWidth: 180 }}>
+            <div>Prycto won volume</div>
+            <div style={{ fontWeight: 600 }}>{formatUsdNumber(stats.pryctoVolumeWon)}</div>
+            <div style={{ fontSize: 12, color: '#6b7280' }}>{formatPct(stats.volumeShare)} of total</div>
+          </div>
+          <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.5rem 0.75rem', minWidth: 180 }}>
+            <div>Prycto participation</div>
+            <div style={{ fontWeight: 600 }}>{stats.pryctoParticipations.toLocaleString()} / {stats.totalRows.toLocaleString()}</div>
+            <div style={{ fontSize: 12, color: '#6b7280' }}>{formatPct(stats.participationRate)} of trades</div>
+          </div>
+          <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.5rem 0.75rem', minWidth: 180 }}>
+            <div>Prycto win rate</div>
+            <div style={{ fontWeight: 600 }}>{formatPct(stats.winRate)}</div>
+            <div style={{ fontSize: 12, color: '#6b7280' }}>{stats.pryctoWins.toLocaleString()} wins</div>
+          </div>
+        </div>
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
           <label htmlFor="sell-token-filter">Sell token</label>
           <input
