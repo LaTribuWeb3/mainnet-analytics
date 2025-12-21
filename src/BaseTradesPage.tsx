@@ -339,9 +339,9 @@ export default function BaseTradesPage() {
     <div>
       {header}
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '1rem' }}>
-        <h1>Base trades (local file)</h1>
+        <h1>Base trades</h1>
         <p style={{ color: '#6b7280', marginBottom: 12 }}>
-          Loaded {trades.length.toLocaleString()} trades from <code>base-trades.ndjson</code>. Click a row to see full competition bids. Rank column shows
+          Loaded {trades.length.toLocaleString()} trades. Click a row to see full competition bids. Rank column shows
           position of solver {solverLabel(TARGET_SOLVER)} ({TARGET_SOLVER.slice(0, 6)}…{TARGET_SOLVER.slice(-4)}) when bids are sorted by buyAmount (highest first).
         </p>
         <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>

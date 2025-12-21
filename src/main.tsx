@@ -12,7 +12,7 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<App />} />
+        <Route path="/" element={<BaseTradesPage />} />
         <Route path="/trades" element={<TradesPage />} />
         <Route path="/competition" element={<CompetitionAnalysis />} />
         <Route path="/order" element={<SingleOrderExplorer />} />
