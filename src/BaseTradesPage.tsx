@@ -171,6 +171,8 @@ export default function BaseTradesPage() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [sellTokenFilter, setSellTokenFilter] = useState<string>('')
   const [buyTokenFilter, setBuyTokenFilter] = useState<string>('')
+  const [pageSize, setPageSize] = useState<number>(50)
+  const [page, setPage] = useState<number>(1)
 
   const tokenLookup = useMemo(() => buildTokenLookup(baseTokens as BaseTokensFile), [])
   const tokenOptions = useMemo(() => {
@@ -274,10 +276,16 @@ export default function BaseTradesPage() {
     return arr
   }, [filtered, sortKey, sortDir, tokenLookup])
 
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize))
+  const currentPage = Math.min(page, totalPages)
+  const start = (currentPage - 1) * pageSize
+  const pageRows = sorted.slice(start, start + pageSize)
+
   const toggleSort = (key: SortKey) => {
     setSortKey((prevKey) => {
       if (prevKey !== key) {
         setSortDir('desc')
+        setPage(1)
         return key
       }
       setSortDir((prevDir) => (prevDir === 'asc' ? 'desc' : 'asc'))
@@ -308,7 +316,10 @@ export default function BaseTradesPage() {
             list="token-suggestions"
             placeholder="symbol / name / address"
             value={sellTokenFilter}
-            onChange={(e) => setSellTokenFilter(e.target.value)}
+            onChange={(e) => {
+              setSellTokenFilter(e.target.value)
+              setPage(1)
+            }}
             style={{ minWidth: 220 }}
           />
           <label htmlFor="buy-token-filter">Buy token</label>
@@ -317,7 +328,10 @@ export default function BaseTradesPage() {
             list="token-suggestions"
             placeholder="symbol / name / address"
             value={buyTokenFilter}
-            onChange={(e) => setBuyTokenFilter(e.target.value)}
+            onChange={(e) => {
+              setBuyTokenFilter(e.target.value)
+              setPage(1)
+            }}
             style={{ minWidth: 220 }}
           />
           <datalist id="token-suggestions">
@@ -327,6 +341,44 @@ export default function BaseTradesPage() {
               </option>
             ))}
           </datalist>
+          <span style={{ flexGrow: 1 }} />
+          <label htmlFor="page-size">Rows per page</label>
+          <select
+            id="page-size"
+            value={pageSize}
+            onChange={(e) => {
+              const next = Number(e.target.value) || 50
+              setPageSize(next)
+              setPage(1)
+            }}
+          >
+            {[25, 50, 100, 200].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage <= 1}
+              style={{ padding: '4px 8px' }}
+            >
+              Prev
+            </button>
+            <div style={{ minWidth: 120, textAlign: 'center' }}>
+              Page {currentPage} / {totalPages} ({sorted.length.toLocaleString()} rows)
+            </div>
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage >= totalPages}
+              style={{ padding: '4px 8px' }}
+            >
+              Next
+            </button>
+          </div>
         </div>
         <table className="min-w-full" style={{ borderCollapse: 'collapse' }}>
           <thead>
@@ -362,7 +414,7 @@ export default function BaseTradesPage() {
             </tr>
           </thead>
           <tbody>
-            {sorted.map((t) => {
+            {pageRows.map((t) => {
               const isOpen = !!expanded[t.orderUid]
               return (
                 <Fragment key={t.orderUid}>
