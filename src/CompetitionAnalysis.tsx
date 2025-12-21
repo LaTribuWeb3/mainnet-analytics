@@ -196,6 +196,7 @@ export default function CompetitionAnalysis() {
             <Link to="/trades">Trades</Link>
             <Link to="/competition">Competition</Link>
             <Link to="/order">Order</Link>
+            <Link to="/base-trades">Base trades</Link>
           </nav>
           <div />
         </div>

@@ -26,6 +26,7 @@ export const SOLVERS = {
     '0x4dd1be0cd607e5382dd2844fa61d3a17e3e83d56': 'Rizzolver',
     '0x6bf97afe2d2c790999cded2a8523009eb8a0823f': 'Portus',
     '0xa9d635ef85bc37eb9ff9d6165481ea230ed32392': 'Quasi',
+    '0x59019a97f9eea41385c476a954a30e3dacc25249': 'Prycto',
 }
 
 // Build a lowercase-keyed view so lookups work regardless of input case

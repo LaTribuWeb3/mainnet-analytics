@@ -251,6 +251,7 @@ export default function TradesPage() {
               <Link to="/">Home</Link>
               <Link to="/trades">Trades</Link>
               <Link to="/competition">Competition</Link>
+            <Link to="/base-trades">Base trades</Link>
             </nav>
             <div />
           </div>
@@ -311,6 +312,9 @@ export default function TradesPage() {
             <nav style={{ display: 'flex', gap: 12 }}>
               <Link to="/">Home</Link>
               <Link to="/trades">Trades</Link>
+              <Link to="/competition">Competition</Link>
+              <Link to="/order">Order</Link>
+              <Link to="/base-trades">Base trades</Link>
             </nav>
             <div />
           </div>
@@ -333,6 +337,7 @@ export default function TradesPage() {
             <Link to="/trades">Trades</Link>
             <Link to="/competition">Competition</Link>
             <Link to="/order">Order</Link>
+            <Link to="/base-trades">Base trades</Link>
           </nav>
           <div />
         </div>
